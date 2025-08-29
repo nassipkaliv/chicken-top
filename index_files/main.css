@@ -1228,7 +1228,9 @@ html.vn .button span {
 
 #animation_container {
 	position: relative;
-	display: block;
+	display: flex;
+  align-items: center;
+  justify-content: center;
 	width: 120rem !important;
 	height: 60rem !important;
 	margin: 3rem auto;
@@ -1922,68 +1924,63 @@ html.vn .button span {
   to   { background-position-y: 900px; } /* > высоты контейнера => ощущение падения */
 }
 
-/* Окно игры */
+/* Окно игры — одна декларация, фиксированная высота */
 .game-container{
   position: relative;
   width: 100%;
-	max-width: 900px;
-  height: 100%;
+  max-width: 900px;
+  height: 450px;             /* фиксированная высота — важно */
   overflow: hidden;
   background: #0f1324;
   isolation: isolate;
-	border-radius: 65px;
-	border: 9px solid transparent;
-  background: linear-gradient(#fff, #fff) padding-box, linear-gradient(180deg, #03AD15 0%, #00FF1A 49%, #017E0E 100%) border-box;
+  border-radius: 65px;
+  border: 9px solid transparent;
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(180deg, #03AD15 0%, #00FF1A 49%, #017E0E 100%) border-box;
 }
 
-/* НЕ сжимаем фон: прижимаем к низу и тянем по высоте трека */
+/* Трек: прижат к НИЗУ и ВЫШЕ контейнера → может сдвигаться вверх */
 .track{
   position: absolute;
   left: 0;
-  bottom: 0;                 /* важно! прижать к низу */
-  width: 1450px;
-  height: 1100px;            /* трек выше контейнера */
+  bottom: 0;                 /* только bottom, top не задаём */
+
+  width: 1260px;             /* шире контейнера по X */
+  height: 1100px;            /* ВЫШЕ контейнера по Y — ключ к движению вверх */
+
   background-image: url("../pics/background.png");
   background-repeat: no-repeat;
-  background-position: left bottom;
-  background-size: auto 100%;/* сохраняем пропорции */
+  background-position: left bottom; /* низ картинки совпадает с низом трека */
+  background-size: auto 100%;       /* не сжимаем по ширине, тянем по высоте */
+
   transform: translate(0,0);
   transition: transform .45s ease;
   pointer-events: none;
   z-index: 1;
 }
 
-/* чтобы курица плавно поднималась тоже */
-.chicken{
-  position:absolute;
-  left:0;
-  bottom:28px;
-  width:120px;
-  transition: left .45s ease, bottom .45s ease; /* обязательно есть bottom! */
-}
-
-/* Спавн — только X координата */
-.spawn{
-  position: absolute;
-  bottom: 120px;
-  width: 1px; height: 1px;
-}
-
-/* Фишки (едут вместе с треком) */
-.lanes{
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
+/* Лейны — общий bottom НЕ задаём (берём из inline при необходимости) */
+.lanes{ position: absolute; inset: 0; pointer-events:none; }
 .lane{
   position: absolute;
-  bottom: 180px;
   width: 140px; height: 140px;
-  transform: translateX(-50%); /* значит left — это центр */
+  transform: translateX(-50%); /* left — это центр */
 }
-.gold-egg{ bottom:120px; }
+.gold-egg{ /* можно задать bottom отдельно, если нужно */ }
 
-/* Картинки фишек + анимация флипа */
+/* Курица — должна уметь анимировать bottom */
+.overlay{ position:absolute; inset:0; z-index:3; pointer-events:none; }
+.chicken{
+  position: absolute;
+  left: 0;
+	left: -10px;
+  bottom: 42px;              /* базовая высота лап */
+  width: 120px; height: auto;
+  transition: left .45s ease, bottom .45s ease; /* добавили bottom */
+}
+
+/* Флип монеток */
 .lane img{
   width: 100%;
   display: block;
@@ -1991,23 +1988,13 @@ html.vn .button span {
   backface-visibility: hidden;
   transition: transform 200ms ease;
 }
-.lane img.flip-out{ transform: rotateY(90deg); }  /* схлопывание */
-.lane img.flip-in { transform: rotateY(0deg);   }  /* обратное раскрытие */
+.lane img.flip-out{ transform: rotateY(90deg); }
+.lane img.flip-in { transform: rotateY(0deg);   }
 
-/* Курица — поверх, не едет с треком */
-.overlay{
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-}
-
-
-/* Прыжок курицы */
-@keyframes chickenHop{
-  0%{   transform: translateY(0); }
-  40%{  transform: translateY(-52px); }
-  100%{ transform: translateY(0); }
+@keyframes chickenHop {
+  0%   { transform: translateY(0); }
+  40%  { transform: translateY(-28px); } /* было -52px */
+  100% { transform: translateY(0); }
 }
 .chicken.hop{ animation: chickenHop .35s ease-out; }
 
@@ -2293,7 +2280,7 @@ html.vn .button span {
 @media (max-width: 540px) {
     .game-container {
         width: 500px;
-				height: 36rem;
+				height: 46rem;
 			}
 
 		.lang_switcher_outer {

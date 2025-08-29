@@ -161,12 +161,12 @@
 
     <div class="lanes">
       <!-- left — центр кружка (из-за translateX(-50%)) -->
-      <div class="lane" style="left:270px; bottom: 240px;"><img src="pics/coef1.png"  alt="1.50x"></div>
-      <div class="lane" style="left:450px; bottom: 340px;"><img src="pics/coef2.png"  alt="1.85x"></div>
-      <div class="lane" style="left:635px; bottom: 440px;"><img src="pics/coef3.png"  alt="1.95x"></div>
-      <div class="lane" style="left:820px; bottom: 540px;"><img src="pics/coef4.png"  alt="2.00x"></div>
-      <div class="lane" style="left:1000px; bottom: 640px;"><img src="pics/coef5.png"  alt="2.10x"></div>
-      <div class="lane gold-egg" style="left:1195px;"><img src="pics/gold-egg.png" alt="2.20x"></div>
+      <div class="lane" style="left:240px; bottom: 240px;"><img src="pics/coef1.png"  alt="1.50x"></div>
+      <div class="lane" style="left:395px; bottom: 350px;"><img src="pics/coef2.png"  alt="1.85x"></div>
+      <div class="lane" style="left:555px; bottom: 460px;"><img src="pics/coef3.png"  alt="1.95x"></div>
+      <div class="lane" style="left:713px; bottom: 570px;"><img src="pics/coef4.png"  alt="2.00x"></div>
+      <div class="lane" style="left:870px;  bottom: 680px;"><img src="pics/coef5.png"  alt="2.10x"></div>
+      <div class="lane gold-egg" style="left:1045px;  bottom: 800px;"><img src="pics/gold-egg.png" alt="2.20x"></div>
     </div>
   </div>
 
@@ -178,7 +178,7 @@
 
   <!-- Курица — отдельный слой (НЕ ездит с треком) -->
   <div class="overlay">
-    <img class="chicken" src="pics/chicken.png" alt="Chicken">
+    <img style="left: -25px; bottom: 45px;" class="chicken" src="pics/chicken.png" alt="Chicken">
   </div>
 </div>
 
@@ -553,9 +553,8 @@
   <script src="./index_files/particles.min.js"></script>
   <script src="./index_files/index.js"></script>
 
-
-<script>
-/* ===== DOM ===== */
+  <script>
+    /* ===================== DOM ===================== */
 const goBtn     = document.getElementById('go-btn');
 const cashBtn   = document.getElementById('cash-btn');
 const balanceEl = document.getElementById('balance');
@@ -570,22 +569,46 @@ const spawnEl   = document.querySelector('.spawn');
 const sparklesEl    = document.getElementById('sparkles');
 const sparkleLayers = sparklesEl ? [...sparklesEl.querySelectorAll('.sparkles-layer')] : [];
 
-/* Popup */
+/* Popup (первый) */
 const popup    = document.getElementById('popup');
 const popupWin = document.getElementById('popup__window_1');
 
-/* ===== STATE ===== */
-let step = 0;
-let trackX = 0;
-let trackY = 0;
+/* ===================== SETTINGS ===================== */
+/** Максимальная «полезная» ширина трека. Больше — не едем по X, чтобы не было белых полей. */
+const MAX_TRACK_WIDTH = 1260;
 
-const CHICKEN_HALF = 60;   // половина ширины спрайта
-const BASE_BOTTOM  = 28;   // высота лап курицы над «полом» контейнера
+/** Половина ширины спрайта курицы (для центрирования по X) */
+const CHICKEN_HALF_W = 60;
 
+/** Базовая высота лап курицы (bottom) в начале игры */
+const BASE_BOTTOM = 42;
+
+/** Мульты по шагам (1.50x → … → 2.20x) */
 const MULTS = [1.50, 1.85, 1.95, 2.00, 2.10, 2.20];
 
+/** ПИКСЕЛЬНОЕ УПРАВЛЕНИЕ ДВИЖЕНИЕМ:
+ *  На КАЖДОМ клике задаём точный translateY трека (фон «падает» вниз ⇒ положительные px),
+ *  и точный bottom курицы. Индексы соответствуют lanes[0..N].
+ */
+const TRACK_FALL_PX = [ 90, 190, 295, 405, 520, 650 ];  // translateY трека на клик
+const CHICKEN_BOTTOM_PX = [ 56, 70, 75, 75, 68, 73 ]; // bottom курицы на клик
+
+/** Где поставить курицу в самом начале. */
+const START_POS = {
+  // 'spawn' — у двери; 'absolute' — по пикселям; 'lane0' — в центр первой лейны
+  mode: 'spawn',
+  left: 10,            // для mode:'absolute'
+  bottom: BASE_BOTTOM   // для mode:'absolute'
+};
+
+/* ===================== STATE ===================== */
+let step   = 0;   // 0..lanes.length-1
+let trackX = 0;   // текущий translateX трека
+let trackY = 0;   // текущий translateY трека (фон «падает» вниз => растёт)
+
+/* Текущий баланс (читаем текст из DOM, по умолчанию 20 EUR) */
 let balanceValue = (() => {
-  const txt = (balanceEl?.textContent || '20').replace(/[^\d.,]/g,'').replace(',','.');
+  const txt = (balanceEl?.textContent || '20').replace(/[^\d.,]/g, '').replace(',', '.');
   const n = parseFloat(txt);
   return Number.isFinite(n) ? n : 20;
 })();
@@ -593,64 +616,63 @@ let balanceValue = (() => {
 let sparklesPlayed = false;
 let popupShown     = false;
 
-/* ===== HELPERS ===== */
+/* ===================== HELPERS ===================== */
+/** Центр по X в СИСТЕМЕ ТРЕКА (для .lane и .spawn left — уже центр из-за translateX(-50%)) */
 function centerXInTrack(el){
   if (el.classList.contains('lane') || el.classList.contains('spawn')) {
-    return parseInt(el.style.left || '0', 10) || 0;   // left — центр из-за translateX(-50%)
+    return parseInt(el.style.left || '0', 10) || 0;
   }
   const r  = el.getBoundingClientRect();
   const rt = track.getBoundingClientRect();
   return r.left + r.width/2 - rt.left;
 }
 
-function bottomInTrack(el){
-  // читаем фактический bottom у элемента лейны/спавна
-  const b = parseInt(getComputedStyle(el).bottom || '0', 10);
-  return Number.isFinite(b) ? b : 0;
+/** Ограничение X, чтобы правый край трека не отрывался от правого края контейнера */
+function clampTrackX(x){
+  const trackWidth = Math.min(track.offsetWidth || MAX_TRACK_WIDTH, MAX_TRACK_WIDTH);
+  const maxTravel  = Math.max(trackWidth - container.clientWidth, 0); // сколько можем уехать влево
+  // x ∈ [-maxTravel, 0]
+  return Math.max(-maxTravel, Math.min(0, x));
 }
 
-function clampX(x){
-  const max = Math.max(track.offsetWidth - container.clientWidth, 0);
-  return Math.max(-max, Math.min(0, x));
-}
-function clampY(y){
-  const max = Math.max(track.offsetHeight - container.clientHeight, 0);
-  return Math.max(-max, Math.min(0, y));
+/** По Y фон ПАДАЕТ вниз, значит translateY растёт от 0 до +maxTravel */
+function clampTrackY(y){
+  const maxTravel = Math.max(track.offsetHeight - container.clientHeight, 0);
+  return Math.min(maxTravel, Math.max(0, y));
 }
 
-function setChickenX(xScreen){
-  chicken.style.left = (xScreen - CHICKEN_HALF) + 'px';
+/** Поставить курицу по экранному X (центр по X) */
+function placeChickenAtScreenX(xScreen){
+  chicken.style.left = (xScreen - CHICKEN_HALF_W) + 'px';
 }
-function setChickenBottom(bottomPx){
-  chicken.style.bottom = bottomPx + 'px';
-}
+
+/** Небольшой «подпрыг» для живости */
 function hop(){
-  chicken.classList.remove('hop'); void chicken.offsetWidth; chicken.classList.add('hop');
+  chicken.classList.remove('hop');
+  void chicken.offsetWidth;    // перезапуск CSS-анимации
+  chicken.classList.add('hop');
 }
 
+/** Флип фишки → монетка (кроме золотого яйца) */
 function flipToCoin(laneEl){
-  if (laneEl.classList.contains('gold-egg') || laneEl.classList.contains('flipped')) return;
+  if (laneEl.classList.contains('gold-egg')) return;
+  if (laneEl.classList.contains('flipped'))  return;
   const img = laneEl.querySelector('img');
   laneEl.classList.add('flipped');
   img.classList.add('flip-out');
-  setTimeout(()=>{
+  setTimeout(() => {
     img.src = 'pics/gold-coin.png';
     img.alt = 'Coin';
     img.classList.remove('flip-out');
     img.classList.add('flip-in');
-    setTimeout(()=>img.classList.remove('flip-in'), 200);
-  },200);
+    setTimeout(() => img.classList.remove('flip-in'), 200);
+  }, 200);
 }
 
-function preciseMul(a,b){
-  const aS=String(a), bS=String(b);
-  const ad=(aS.split('.')[1]||'').length, bd=(bS.split('.')[1]||'').length;
-  const fA=Math.round(a*Math.pow(10,ad)), fB=Math.round(b*Math.pow(10,bd));
-  return (fA*fB)/Math.pow(10,ad+bd);
-}
-function animateBalance(from, to, ms=450){
+/** Анимация баланса */
+function animateBalance(from, to, ms = 450){
   const t0 = performance.now();
-  const tick = t=>{
+  const tick = (t) => {
     const k = Math.min((t - t0)/ms, 1);
     balanceEl.textContent = (from + (to - from)*k).toFixed(2) + ' EUR';
     if (k < 1) requestAnimationFrame(tick);
@@ -658,86 +680,139 @@ function animateBalance(from, to, ms=450){
   requestAnimationFrame(tick);
 }
 
-/* Sparkles */
+/** Точное умножение (без плавающих ошибок) */
+function preciseMul(a,b){
+  const aStr=String(a), bStr=String(b);
+  const aDec=(aStr.split('.')[1]||'').length, bDec=(bStr.split('.')[1]||'').length;
+  const fA=Math.round(a*Math.pow(10,aDec)), fB=Math.round(b*Math.pow(10,bDec));
+  return (fA*fB)/Math.pow(10,aDec+bDec);
+}
+
+/* ===================== SPARKLES / POPUP ===================== */
 function playSparklesOnce(){
   if (!sparklesEl || sparklesPlayed) return;
   sparklesPlayed = true;
-  sparkleLayers.forEach(l => { l.style.animation='none'; void l.offsetWidth; l.style.animation=''; l.style.animationPlayState='running'; });
+  sparkleLayers.forEach(l => {
+    l.style.animation = 'none';
+    void l.offsetWidth;
+    l.style.animation = '';
+    l.style.animationPlayState = 'running';
+  });
   sparklesEl.classList.add('active');
-  setTimeout(()=>sparklesEl.classList.remove('active'), 3500);
+  setTimeout(()=> sparklesEl.classList.remove('active'), 3500);
 }
 
-/* Popup */
 function openPopup(){
   if (!popup || popupShown) return;
   popupShown = true;
-  popup.style.display='block'; popup.style.visibility='visible'; popup.style.opacity='1';
+  popup.style.display    = 'block';
+  popup.style.visibility = 'visible';
+  popup.style.opacity    = '1';
+  popup.removeAttribute('aria-hidden');
   if (popupWin){
-    popupWin.style.display='block'; popupWin.style.transform='scale(0.92)'; popupWin.style.opacity='0';
+    popupWin.style.display   = 'block';
+    popupWin.style.transform = 'scale(0.92)';
+    popupWin.style.opacity   = '0';
     requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      popupWin.style.transition='transform .25s ease, opacity .25s ease';
-      popupWin.style.transform='scale(1)'; popupWin.style.opacity='1';
+      popupWin.style.transition = 'transform .25s ease, opacity .25s ease';
+      popupWin.style.transform  = 'scale(1)';
+      popupWin.style.opacity    = '1';
     }));
   }
 }
 
-/* ===== INIT ===== */
+/* ===================== START POSITION ===================== */
+function setInitialChicken(){
+  const prevTransition = chicken.style.transition;
+  chicken.style.transition = 'none'; // чтобы не было «мягкого скольжения» при установке
+
+  let xScreen;
+  let bottomPx = BASE_BOTTOM;
+
+  if (START_POS.mode === 'absolute'){
+    xScreen  = START_POS.left;
+    bottomPx = START_POS.bottom;
+
+  } else if (START_POS.mode === 'lane0' && lanes[0]){
+    const lane0CenterX = centerXInTrack(lanes[0]) + trackX;
+    xScreen  = lane0CenterX;
+    const lane0BottomInline = parseInt(lanes[0].style.bottom || '0', 10);
+    bottomPx = Number.isFinite(lane0BottomInline) && lane0BottomInline > 0
+      ? lane0BottomInline
+      : (CHICKEN_BOTTOM_PX[0] ?? BASE_BOTTOM);
+
+  } else { // 'spawn' по умолчанию
+    const spawnCenterX = centerXInTrack(spawnEl) + trackX;
+    xScreen  = spawnCenterX;
+    bottomPx = BASE_BOTTOM;
+  }
+
+  placeChickenAtScreenX(xScreen);
+  chicken.style.bottom = bottomPx + 'px';
+
+  // Вернём transition
+  requestAnimationFrame(()=>{ chicken.style.transition = prevTransition || ''; });
+}
+
+/* ===================== INIT ===================== */
 window.addEventListener('load', () => {
-  const spawnX = centerXInTrack(spawnEl) + trackX;
-  setChickenX(spawnX);
-  setChickenBottom(BASE_BOTTOM);      // стартуем внизу
+  setInitialChicken();
   balanceEl.textContent = balanceValue.toFixed(2) + ' EUR';
 });
 
-/* ===== MAIN CLICK ===== */
+/* ===================== MAIN CLICK ===================== */
 goBtn.addEventListener('click', () => {
   if (step >= lanes.length) return;
 
+  // Включаем «Cash Out» после первого шага
   if (step === 0 && cashBtn) cashBtn.classList.remove('disabled');
 
-  const lane   = lanes[step];
-  const laneCX = centerXInTrack(lane);    // центр по X в координатах трека
-  const doorCX = centerXInTrack(spawnEl); // центр двери по X в координатах трека
+  const targetLane = lanes[step];
 
-  // ΔY считаем по настоящей «ступеньке» (bottom у .lane)
-  const spawnB = bottomInTrack(spawnEl);  // если не задан, будет 0
-  const laneB  = bottomInTrack(lane);
-  const deltaY = laneB - spawnB;          // насколько выше цель относительно двери
+  /* --- 1) Считаем новый X/Y трека --- */
+  // X: центр цели к «двери», но без белого зазора справа
+  const laneCenterTrack   = centerXInTrack(targetLane);
+  const anchorCenterTrack = centerXInTrack(spawnEl);
+  const nextTrackX = clampTrackX(-(laneCenterTrack - anchorCenterTrack));
 
-  // 1) фон: вправо и вверх (вверх — отрицательный translateY)
-  trackX = clampX(-(laneCX - doorCX));
-  trackY = clampY(-deltaY);
-  track.style.transform = `translate(${trackX}px, ${trackY}px)`;
+  // Y: точное значение падения фона из массива (в пикселях)
+  const wantedFall = TRACK_FALL_PX[Math.min(step, TRACK_FALL_PX.length-1)] ?? 0;
+  const nextTrackY = clampTrackY(wantedFall);
 
-  // 2) курица: X — к центру лейна, Y — на ту же высоту
-  setChickenX(laneCX + trackX);
-  setChickenBottom(BASE_BOTTOM + deltaY);
+  trackX = nextTrackX;
+  trackY = nextTrackY;
+  track.style.transform = `translate3d(${trackX}px, ${trackY}px, 0)`; // фон «падает»
+
+  /* --- 2) Курица: X — центр цели; Y — точный bottom из массива --- */
+  const laneCenterScreenX = laneCenterTrack + trackX;
+  placeChickenAtScreenX(laneCenterScreenX);
+
+  const wantedChickenBottom = CHICKEN_BOTTOM_PX[Math.min(step, CHICKEN_BOTTOM_PX.length-1)];
+  chicken.style.bottom = (wantedChickenBottom ?? BASE_BOTTOM) + 'px';
+
   hop();
 
-  // 3) флип кружка
-  flipToCoin(lane);
+  /* --- 3) Флип монетки (кроме золотого яйца) --- */
+  flipToCoin(targetLane);
 
-  // 4) баланс
+  /* --- 4) Баланс --- */
   const mult = MULTS[step] || 1;
   const from = balanceValue;
   let next   = preciseMul(balanceValue, mult);
-  if (step === MULTS.length - 1) next = 1000;
+  if (step === MULTS.length - 1) next = 1000; // финальная сумма
   balanceValue = next;
   animateBalance(from, next, 450);
 
-  // 5) финал
-  if (step === lanes.length - 1 || lane.classList.contains('gold-egg')) {
+  /* --- 5) Финал: конфетти + попап на последнем шаге --- */
+  if (step === lanes.length - 1 || targetLane.classList.contains('gold-egg')){
     playSparklesOnce();
     setTimeout(openPopup, 400);
   }
 
   step++;
 });
-</script>
 
-
-
-
+  </script>
 
 
 
