@@ -2144,15 +2144,15 @@ html.vn .button span {
   .balance-text {
     padding: 10px;
     width: 162px;
-    height: 35px;
+    height: 32px;
     border: 2.28px solid #a71285;
     border-radius: 6px;
   }
 
   .balance-count {
-    padding: 5px 52px;
+    padding: 2px 52px;
     margin-top: -10px;
-    border: 2.93px solid #a7622e;
+    border: 2.5px solid #a7622e;
     border-radius: 8px;
   }
 
