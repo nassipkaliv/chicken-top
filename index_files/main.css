@@ -1513,25 +1513,6 @@ html.vn .button span {
 	display: none
 }
 
-.go-btn {
-  border: 9px solid #6ee36f;
-  border-radius: 25px;
-  background: linear-gradient(180deg, #2acd3b 0%, #24f039 49.52%, #24b032 100%) !important;
-  transform: none;
-}
-
-.go-btn span {
-  font-family: var(--third-family);
-  font-weight: 900;
-  font-size: 63px !important;
-  text-transform: uppercase;
-  text-align: center;
-  color: #fff;
-  font-style: normal;
-  -webkit-text-stroke: 3px #096A3C; 
-}
-
-
 
 .webp .wrapper {
 	background: url(../pics/bg.webp) 50% 0 no-repeat;
@@ -1650,7 +1631,7 @@ html.vn .button span {
 	left: 0;
 	top: 0;
 	background: rgba(4, 15, 48, .8);
-	z-index: 10;
+	z-index: 99;
 	opacity: 0;
 	pointer-events: none;
 	-webkit-transition: all .3s ease-in-out;
@@ -1658,7 +1639,7 @@ html.vn .button span {
 }
 
 .popup_2 .popup__title span {
-	font-size: 36px;
+	font-size: 2.8rem;
 }
 
 .popup_2 .popup__bonus {
@@ -1711,14 +1692,21 @@ html.vn .button span {
 	display: -webkit-box;
 	display: -ms-flexbox;
 	display: flex;
+	-webkit-filter: drop-shadow(0 0 2.6rem #d900e4);
+  filter: drop-shadow(0 0 2.6rem #d900e4);
+
+	font-family: "Druk Medium", sans-serif;
+  font-style: italic;
+  font-weight: 500;
 }
 
 @media(max-width: 620px) {
+
 	.popup__inner {
-		top: 18.0rem;
-		width: 52rem;
-		min-height: 46rem
-	}
+    top: 27.3rem;
+    width: 46rem;
+    min-height: 46rem;
+  }
 }
 
 .popup__window {
@@ -1741,18 +1729,21 @@ html.vn .button span {
 }
 
 .popup__title span {
-  font-family: var(--third-family);
-	display: inline-block;
-	font-size: 48px;
-  font-weight: 900;
-  text-transform: uppercase;
-  text-align: center;
-  color: #fff;
-	-webkit-text-stroke: 1px #72032B;
+    display: inline-block;
+    color: #fff;
+    text-transform: uppercase;
+    font-size: 4.8rem;
+    line-height: 115.646%;
+    letter-spacing: .1945rem;
+    text-transform: uppercase;
+    color: rgba(0, 0, 0, 0);
+    -webkit-text-stroke: .2rem #fff;
+    text-stroke: .2rem #fff;
+    -webkit-background-clip: text;
+    background-clip: text;
 }
-
 .popup__win span {
-  font-family: var(--third-family);
+  
   font-weight: 900;
   font-size: 85px;
   text-transform: uppercase;
@@ -1761,18 +1752,13 @@ html.vn .button span {
   -webkit-text-stroke: 4px #72032B;
 }
 
-.popup__bonus {
-	margin: 1.5rem 0
-}
-
 .popup__bonus span {
-  font-family: var(--third-family);
-  font-weight: 600;
-  font-size: 33px;
-  text-transform: uppercase;
-  text-align: center;
-  color: #fff;
-  -webkit-text-stroke: 1.2px #72032B;
+    display: inline;
+    color: #fff;
+    text-align: center;
+    font-size: 3.4rem;
+    line-height: 1.2;
+    text-transform: uppercase;
 }
 
 .popup__subtitle {
@@ -1780,36 +1766,32 @@ html.vn .button span {
 }
 
 .popup__subtitle span {
-	color: #fff;
-	text-align: center;
-	font-size: 2rem;
-	text-transform: uppercase
+  color: #fff;
+  text-align: center;
+  font-size: 2rem;
+  text-transform: uppercase;
 }
 
 .popup__btn {
-	position: relative;
-	display: -webkit-box;
-	display: -ms-flexbox;
-	display: flex;
-	-webkit-box-align: center;
-	-ms-flex-align: center;
-	align-items: center;
-	-webkit-box-pack: center;
-	-ms-flex-pack: center;
-	justify-content: center;
-	text-align: center;
-	margin: 1rem auto 1.5rem;
-  width: 100%;
+    position: relative;
+    display: -webkit-box;
+    display: -ms-flexbox;
+    display: flex;
+    -webkit-box-align: center;
+    -ms-flex-align: center;
+    align-items: center;
+    -webkit-box-pack: center;
+    -ms-flex-pack: center;
+    justify-content: center;
+    text-align: center;
+    margin: 1rem auto 1.5rem;
+    width: 35rem;
 }
 
 .popup__btn span {
-	font-family: var(--third-family);
-  font-weight: 900;
-  font-size: 48px !important;
-  text-transform: uppercase;
-  text-align: center;
-  color: #fff;
-  white-space: nowrap;
+	font-family: "Druk Wide Cy Web", sans-serif;
+	font-weight: bold;
+	font-style: normal
 }
 
 .popup__img {
@@ -1837,21 +1819,24 @@ html.vn .button span {
 }
 
 .popup__terms {
-	font-family: var(--third-family);
-  font-weight: 600;
-  font-size: 26px;
-  text-transform: uppercase;
-  text-align: center;
-  color: #d34d6d;
-	-webkit-text-stroke: 2px #72032B;
-  margin: 20px 0;
-  -webkit-transition: all .2s;
-	transition: all .2s
+    font-family: "Inter", sans-serif;
+    font-weight: 400;
+    font-style: normal;
+    color: #ff4e8d;
+    font-size: 1.8rem;
+    font-size: clamp(12px, 1.8rem, 1.8rem);
+    font-weight: 400;
+    line-height: 1;
+    text-decoration: none;
+    border-bottom: 1px solid #ff4e8d;
+    -webkit-transition: all .2s;
+    transition: all .2s;
 }
 
+
 .popup__terms:hover {
-	color: #fff;
-	border-bottom: 1px solid rgba(0, 0, 0, 0)
+    color: #fff;
+    border-bottom: 1px solid rgba(0, 0, 0, 0);
 }
 
 .popup__show {
@@ -1944,7 +1929,7 @@ html.vn .button span {
 .track{
   position: absolute;
   left: 0;
-  bottom: 0;                 /* только bottom, top не задаём */
+  bottom: -20px;                 /* только bottom, top не задаём */
 
   width: 1260px;             /* шире контейнера по X */
   height: 1100px;            /* ВЫШЕ контейнера по Y — ключ к движению вверх */
@@ -1964,7 +1949,7 @@ html.vn .button span {
 .lanes{ position: absolute; inset: 0; pointer-events:none; }
 .lane{
   position: absolute;
-  width: 140px; height: 140px;
+  width: 100px; height: 100px;
   transform: translateX(-50%); /* left — это центр */
 }
 .gold-egg{ /* можно задать bottom отдельно, если нужно */ }
@@ -1975,8 +1960,8 @@ html.vn .button span {
   position: absolute;
   left: 0;
 	left: -10px;
-  bottom: 42px;              /* базовая высота лап */
-  width: 120px; height: auto;
+  bottom: 32px;              /* базовая высота лап */
+  width: 100px; height: auto;
   transition: left .45s ease, bottom .45s ease; /* добавили bottom */
 }
 
@@ -2053,9 +2038,9 @@ html.vn .button span {
   }
   .lane {
     width: 70px;
-    height: 70px;
   }
 }
+
 
 @media(max-width: 1040px) {
 	html {
@@ -2109,10 +2094,6 @@ html.vn .button span {
 		margin: 0 auto 4.5rem
 	}
 
-  .go-btn span {
-    font-size: 45px !important;
-    white-space: nowrap;
-  }
 
   .claim-btn span {
     font-size: 41px !important;
@@ -2152,7 +2133,7 @@ html.vn .button span {
 	}
 
   .balance_container  {
-    top: -40.5%;
+    top: -49.0%;
   }
 
   .balance-text span {
@@ -2198,7 +2179,7 @@ html.vn .button span {
 	}
 
   .popup__title span {
-    font-size: 36px;
+    font-size: 2.8rem;
   }
 
   .popup__win span {
@@ -2206,17 +2187,6 @@ html.vn .button span {
     -webkit-text-stroke: 2.5px #72032B;
   }
 
-  .popup__bonus span {
-    font-size: 25px;
-    -webkit-text-stroke: 1px #72032B;
-  }
-
-  .popup__btn span {
-    font-size: 36px !important; 
-    -webkit-text-stroke: 2px #096A3C;
-  }
-
-  
 
 	.lang_switcher_outer {
     width: 9rem;
@@ -2280,7 +2250,7 @@ html.vn .button span {
 @media (max-width: 540px) {
     .game-container {
         width: 500px;
-				height: 46rem;
+				height: 44rem;
 			}
 
 		.lang_switcher_outer {
@@ -2289,7 +2259,7 @@ html.vn .button span {
 			}
 
 			#animation_container {
-				margin-bottom: 5rem;
+				margin-bottom: 6rem;
 			}
 
 			.btns .button {
@@ -2298,6 +2268,14 @@ html.vn .button span {
 
 			body {
 				overflow-y: hidden;
+			}
+
+			.track {
+				bottom: -30px;
+			}
+
+			.chicken {
+				bottom: 12px;
 			}
 
 }
@@ -2585,3 +2563,40 @@ html.vn .button span {
 }
 
 /*# sourceMappingURL=main.css.map */
+
+.ru .popup .button span {
+    font-size: 2.2rem;
+}
+
+.ru .popup__bonus span {
+	    font-size: 2.8rem;
+}
+
+.popup__btn {
+    margin-top: 2rem;
+}
+
+.start-btn {
+    border: 9px solid #6ee36f;
+    border-radius: 25px;
+    background: linear-gradient(180deg, #2acd3b 0%, #24f039 49.52%, #24b032 100%) !important;
+    transform: none;
+}
+
+.start-btn span {
+    font-family: var(--third-family);
+    font-weight: 900;
+    font-size: 63px !important;
+    text-transform: uppercase;
+    text-align: center;
+    color: #fff;
+    font-style: normal;
+    -webkit-text-stroke: 3px #096A3C;
+}
+
+@media (max-width: 640px) {
+    .start-btn span {
+        font-size: 45px !important;
+        white-space: nowrap;
+    }
+}
