@@ -1580,7 +1580,7 @@ html.vn .button span {
 
 @media(max-width: 620px) {
 	.bg-blue {
-		margin-top: -2.5rem;
+		margin-top: -1.5rem;
 	}
 }
 
@@ -2133,7 +2133,7 @@ html.vn .button span {
 	}
 
   .balance_container  {
-    top: -49.0%;
+    top: -48.0%;
   }
 
   .balance-text span {
@@ -2250,7 +2250,7 @@ html.vn .button span {
 @media (max-width: 540px) {
     .game-container {
         width: 500px;
-				height: 44rem;
+				height: 43.5rem;
 			}
 
 		.lang_switcher_outer {
@@ -2263,7 +2263,11 @@ html.vn .button span {
 			}
 
 			.btns .button {
-				margin-bottom: 1.5rem;
+				margin-bottom: 0rem;
+			}
+
+			.start-btn {
+				margin-bottom: 1.5rem !important;
 			}
 
 			body {
