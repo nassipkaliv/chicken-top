@@ -455,7 +455,7 @@ let CFG = pickConfig();
 function adjustLanesForMobile() {
   if (window.matchMedia('(max-width: 540px)').matches) {
     const lanes = document.querySelectorAll('.lane');
-    const bottoms = [290, 390, 500, 610, 700, 800]; // новые Y в px
+    const bottoms = [280, 380, 490, 595, 690, 800]; // новые Y в px
     lanes.forEach((lane, i) => {
       if (bottoms[i] !== undefined) {
         lane.style.bottom = bottoms[i] + 'px';
