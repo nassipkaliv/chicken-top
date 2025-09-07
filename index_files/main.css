@@ -1952,7 +1952,9 @@ html.vn .button span {
   width: 100px; height: 100px;
   transform: translateX(-50%); /* left — это центр */
 }
-.gold-egg{ /* можно задать bottom отдельно, если нужно */ }
+.gold-egg{ /* можно задать bottom отдельно, если нужно */
+	bottom: 800px;
+}
 
 /* Курица — должна уметь анимировать bottom */
 .overlay{ position:absolute; inset:0; z-index:3; pointer-events:none; }
@@ -1978,10 +1980,19 @@ html.vn .button span {
 
 @keyframes chickenHop {
   0%   { transform: translateY(0); }
-  40%  { transform: translateY(-28px); } /* было -52px */
+  40%  { transform: translateY(-52px); } /* было -52px */
   100% { transform: translateY(0); }
 }
-.chicken.hop{ animation: chickenHop .35s ease-out; }
+.chicken.hop{ animation: chickenHop .5s ease-out; }
+
+@keyframes chickenCelebrate {
+  0%, 20%, 40%, 60%, 80%, 100% { transform: translateY(0); }
+  10%, 30%, 50%, 70% { transform: translateY(-18px); } /* высота прыжка */
+}
+
+.chicken.celebrate {
+  animation: chickenCelebrate 1.5s ease-out; /* два прыжка за 1 секунду */
+}
 
 
 @-webkit-keyframes popup-img-scaling {
@@ -2017,13 +2028,13 @@ html.vn .button span {
     width: 80px;         /* уменьшаем курицу */
   }
   .lane {
-    width: 90px;
-    height: 90px;
+    width: 75px;
+    height: 75px;
 		bottom: 140px;
 	}
 
 	.gold-egg {
-		bottom: 90px;
+		bottom: 120px;
 	}
 	
 }
@@ -2259,7 +2270,7 @@ html.vn .button span {
 			}
 
 			#animation_container {
-				margin-bottom: 6rem;
+				margin-bottom: 8rem;
 			}
 
 			.btns .button {

@@ -431,7 +431,7 @@ const CONFIG = {
     CHICKEN_X_OFFSET: 40,
     SPARKLES_TO_POPUP_DELAY: 2200,
     TRACK_FALL_PX:     [100, 200, 305, 415, 530, 640],
-    CHICKEN_BOTTOM_PX: [ 32,  41,  45,  45,  40,  65],
+    CHICKEN_BOTTOM_PX: [ 32,  41,  45,  45,  40,  30],
     START_POS: { mode: 'spawn', left: 0, bottom: 22 }
   },
   mobile: {
@@ -439,9 +439,9 @@ const CONFIG = {
     CHICKEN_HALF_W: 90,
     BASE_BOTTOM: 18,
     CHICKEN_X_OFFSET: 48,
-    SPARKLES_TO_POPUP_DELAY: 2200,
-    TRACK_FALL_PX:     [ 100, 205, 310, 430, 510, 660],
-    CHICKEN_BOTTOM_PX: [ 20,  25,  30,  20,  48,  43],
+    SPARKLES_TO_POPUP_DELAY: 1300,
+    TRACK_FALL_PX:     [ 100, 205, 310, 430, 510, 640],
+    CHICKEN_BOTTOM_PX: [ 20,  25,  30,  20,  48,  15],
     START_POS: { mode: 'spawn', left: 0, bottom: 22 }
   }
 };
@@ -455,7 +455,7 @@ let CFG = pickConfig();
 function adjustLanesForMobile() {
   if (window.matchMedia('(max-width: 540px)').matches) {
     const lanes = document.querySelectorAll('.lane');
-    const bottoms = [250, 350, 455, 565, 680, 750]; // новые Y в px
+    const bottoms = [290, 390, 500, 610, 700, 800]; // новые Y в px
     lanes.forEach((lane, i) => {
       if (bottoms[i] !== undefined) {
         lane.style.bottom = bottoms[i] + 'px';
@@ -642,6 +642,9 @@ window.addEventListener('resize', () => {
 goBtn.addEventListener('click', () => {
   if (step >= lanes.length) return;
 
+  goBtn.classList.add('disabled');
+  setTimeout(() => goBtn.classList.remove('disabled'), 400); 
+
   if (step === 0 && cashBtn) cashBtn.classList.remove('disabled');
 
   const targetLane = lanes[step];
@@ -677,6 +680,11 @@ goBtn.addEventListener('click', () => {
 
   // 5) Финал
   if (step === lanes.length - 1 || targetLane.classList.contains('gold-egg')){
+
+    chicken.classList.remove('celebrate');
+    void chicken.offsetWidth; // сброс анимации
+    chicken.classList.add('celebrate');
+
     playSparklesOnce();
     setTimeout(openPopup, SPARKLES_TO_POPUP_DELAY);
   }
