@@ -429,7 +429,7 @@ const CONFIG = {
     CHICKEN_HALF_W: 90,
     BASE_BOTTOM: 22,
     CHICKEN_X_OFFSET: 40,
-    SPARKLES_TO_POPUP_DELAY: 1100,
+    SPARKLES_TO_POPUP_DELAY: 1000,
     TRACK_FALL_PX:     [100, 200, 305, 415, 530, 640],
     CHICKEN_BOTTOM_PX: [ 0,  12,  14,   0,  -8,  -15],
     // ВАЖНО: стартуем в абсолютной позиции по X
@@ -440,10 +440,10 @@ const CONFIG = {
     CHICKEN_HALF_W: 90,
     BASE_BOTTOM: 18,
     CHICKEN_X_OFFSET: 48,
-    SPARKLES_TO_POPUP_DELAY: 1100,
+    SPARKLES_TO_POPUP_DELAY: 1000,
     TRACK_FALL_PX:     [100, 205, 310, 430, 510, 640],
-    CHICKEN_BOTTOM_PX: [-8,  -5,  1,  -15,  28, -30],
-    START_POS: { mode: 'absolute', left: 22, bottom: 15 } // тоже -15px на мобиле
+    CHICKEN_BOTTOM_PX: [-8,  1,  4,  -15,  28, -30],
+    START_POS: { mode: 'absolute', left: 22, bottom: 15 }
   }
 };
 function pickConfig(){ return matchMedia('(max-width:540px)').matches ? CONFIG.mobile : CONFIG.desktop; }
