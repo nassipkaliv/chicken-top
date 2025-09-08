@@ -1978,20 +1978,18 @@ html.vn .button span {
 .lane img.flip-out{ transform: rotateY(90deg); }
 .lane img.flip-in { transform: rotateY(0deg);   }
 
-@keyframes chickenHop {
-  0%   { transform: translateY(0); }
-  40%  { transform: translateY(-52px); } /* было -52px */
-  100% { transform: translateY(0); }
+.chicken{
+  will-change: left, bottom;
+  transition: left .45s ease;  
 }
-.chicken.hop{ animation: chickenHop .5s ease-out; }
 
 @keyframes chickenCelebrate {
-  0%, 20%, 40%, 60%, 80%, 100% { transform: translateY(0); }
-  10%, 30%, 50%, 70% { transform: translateY(-18px); } /* высота прыжка */
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-18px); }
 }
 
 .chicken.celebrate {
-  animation: chickenCelebrate 1.5s ease-out; /* два прыжка за 1 секунду */
+  animation: chickenCelebrate 0.3s ease-in-out infinite;
 }
 
 

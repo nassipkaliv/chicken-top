@@ -402,14 +402,14 @@
   <script src="./index_files/particles.min.js"></script>
   <script src="./index_files/index.js"></script>
 
-    <script>
-      /* ===================== DOM ===================== */
+  <script>
+    /* ===================== DOM ===================== */
 const goBtn     = document.getElementById('go-btn');
 const cashBtn   = document.getElementById('cash-btn');
 const balanceEl = document.getElementById('balance');
 
-const container = document.getElementById('game');   // .game-container
-const track     = document.getElementById('track');  // фон + фишки
+const container = document.getElementById('game');
+const track     = document.getElementById('track');
 const chicken   = document.querySelector('.chicken');
 const lanes     = [...document.querySelectorAll('.lane')];
 const spawnEl   = document.querySelector('.spawn');
@@ -418,55 +418,47 @@ const spawnEl   = document.querySelector('.spawn');
 const sparklesEl    = document.getElementById('sparkles');
 const sparkleLayers = sparklesEl ? [...sparklesEl.querySelectorAll('.sparkles-layer')] : [];
 
-/* Popup (первый) */
+/* Popup */
 const popup    = document.getElementById('popup');
 const popupWin = document.getElementById('popup__window_1');
 
-/* ===================== CONFIG (desktop vs mobile ≤540px) ===================== */
+/* ===================== CONFIG ===================== */
 const CONFIG = {
   desktop: {
     MAX_TRACK_WIDTH: 1260,
     CHICKEN_HALF_W: 90,
     BASE_BOTTOM: 22,
     CHICKEN_X_OFFSET: 40,
-    SPARKLES_TO_POPUP_DELAY: 2200,
+    SPARKLES_TO_POPUP_DELAY: 1100,
     TRACK_FALL_PX:     [100, 200, 305, 415, 530, 640],
-    CHICKEN_BOTTOM_PX: [ 32,  41,  45,  45,  40,  30],
-    START_POS: { mode: 'spawn', left: 0, bottom: 22 }
+    CHICKEN_BOTTOM_PX: [ 0,  12,  14,   0,  -8,  -15],
+    // ВАЖНО: стартуем в абсолютной позиции по X
+    START_POS: { mode: 'absolute', left: -15, bottom: 22 }
   },
   mobile: {
     MAX_TRACK_WIDTH: 1260,
     CHICKEN_HALF_W: 90,
     BASE_BOTTOM: 18,
     CHICKEN_X_OFFSET: 48,
-    SPARKLES_TO_POPUP_DELAY: 1300,
-    TRACK_FALL_PX:     [ 100, 205, 310, 430, 510, 640],
-    CHICKEN_BOTTOM_PX: [ 20,  25,  30,  20,  48,  15],
-    START_POS: { mode: 'spawn', left: 0, bottom: 22 }
+    SPARKLES_TO_POPUP_DELAY: 1100,
+    TRACK_FALL_PX:     [100, 205, 310, 430, 510, 640],
+    CHICKEN_BOTTOM_PX: [-8,  -5,  1,  -15,  28, -30],
+    START_POS: { mode: 'absolute', left: 22, bottom: 15 } // тоже -15px на мобиле
   }
 };
-
-function pickConfig() {
-  const m = window.matchMedia('(max-width: 540px)');
-  return m.matches ? CONFIG.mobile : CONFIG.desktop;
-}
+function pickConfig(){ return matchMedia('(max-width:540px)').matches ? CONFIG.mobile : CONFIG.desktop; }
 let CFG = pickConfig();
 
-function adjustLanesForMobile() {
-  if (window.matchMedia('(max-width: 540px)').matches) {
-    const lanes = document.querySelectorAll('.lane');
-    const bottoms = [280, 380, 490, 595, 690, 800]; // новые Y в px
-    lanes.forEach((lane, i) => {
-      if (bottoms[i] !== undefined) {
-        lane.style.bottom = bottoms[i] + 'px';
-      }
-    });
-  }
+/* мобильные bottom'ы у лейнов */
+function adjustLanesForMobile(){
+  if (!matchMedia('(max-width:540px)').matches) return;
+  const bottoms = [280, 380, 490, 595, 690, 800];
+  document.querySelectorAll('.lane').forEach((lane,i)=>{
+    if (bottoms[i]!=null) lane.style.bottom = bottoms[i] + 'px';
+  });
 }
-
-window.addEventListener('load', adjustLanesForMobile);
-window.addEventListener('resize', adjustLanesForMobile);
-
+addEventListener('load', adjustLanesForMobile);
+addEventListener('resize', adjustLanesForMobile);
 
 /* ===================== SETTINGS (из CFG) ===================== */
 let MAX_TRACK_WIDTH         = CFG.MAX_TRACK_WIDTH;
@@ -474,27 +466,22 @@ let CHICKEN_HALF_W          = CFG.CHICKEN_HALF_W;
 let BASE_BOTTOM             = CFG.BASE_BOTTOM;
 let CHICKEN_X_OFFSET        = CFG.CHICKEN_X_OFFSET;
 let SPARKLES_TO_POPUP_DELAY = CFG.SPARKLES_TO_POPUP_DELAY;
-
 let TRACK_FALL_PX           = CFG.TRACK_FALL_PX.slice();
 let CHICKEN_BOTTOM_PX       = CFG.CHICKEN_BOTTOM_PX.slice();
-let START_POS               = { ...CFG.START_POS };
+let START_POS               = { ...CFG.START_POS }; // тут храним X спавна курицы
 
-/** Мульты по шагам */
+/* ===================== ECON ===================== */
 const MULTS = [1.50, 1.85, 1.95, 2.00, 2.10, 2.20];
 
 /* ===================== STATE ===================== */
 let step   = 0;
-let trackX = 0;
-let trackY = 0;
+let trackX = 0, trackY = 0;
+let sparklesPlayed = false, popupShown = false;
 
 let balanceValue = (() => {
-  const txt = (balanceEl?.textContent || '20').replace(/[^\d.,]/g, '').replace(',', '.');
-  const n = parseFloat(txt);
-  return Number.isFinite(n) ? n : 20;
+  const txt = (balanceEl?.textContent || '20').replace(/[^\d.,]/g,'').replace(',','.');
+  const n = parseFloat(txt); return Number.isFinite(n) ? n : 20;
 })();
-
-let sparklesPlayed = false;
-let popupShown     = false;
 
 /* ===================== HELPERS ===================== */
 function centerXInTrack(el){
@@ -506,7 +493,7 @@ function centerXInTrack(el){
   return r.left + r.width/2 - rt.left;
 }
 function clampTrackX(x){
-  const trackWidth = Math.min(track.offsetWidth || MAX_TRACK_WIDTH, MAX_TRACK_WIDTH);
+  const trackWidth = Math.min(track.offsetWidth||MAX_TRACK_WIDTH, MAX_TRACK_WIDTH);
   const maxTravel  = Math.max(trackWidth - container.clientWidth, 0);
   return Math.max(-maxTravel, Math.min(0, x));
 }
@@ -514,29 +501,101 @@ function clampTrackY(y){
   const maxTravel = Math.max(track.offsetHeight - container.clientHeight, 0);
   return Math.min(maxTravel, Math.max(0, y));
 }
-function placeChickenAtScreenX(xScreen){
+function setChickenLeftByScreenX(xScreen){
   chicken.style.left = (xScreen - CHICKEN_HALF_W + CHICKEN_X_OFFSET) + 'px';
 }
-function hop(){
-  chicken.classList.remove('hop');
-  void chicken.offsetWidth;
-  chicken.classList.add('hop');
+function laneCenterLeftOnScreen(laneEl){
+  const laneCenterTrack = centerXInTrack(laneEl);
+  const xScreen         = laneCenterTrack + trackX;
+  return xScreen - CHICKEN_HALF_W + CHICKEN_X_OFFSET;
 }
+
+/* ===================== БЕЗЬЕ-ПРЫЖОК (плавный, без финального «снапа») ===================== */
+function easeInOutSine(t){ return 0.5 - 0.5*Math.cos(Math.PI*t); }
+
+/** плавный прыжок по кубической Безье: углы старта/посадки + лёгкое «подвисание» у апекса */
+function jumpBezier({ x0, y0, x1, y1, duration=520, safetyMargin=84 }) {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const dist = Math.hypot(dx, dy);
+
+  // форма кривой
+  const heightBase   = safetyMargin;  // базовый подъём
+  const heightK      = 0.28;          // рост высоты от дистанции
+  const heightCap    = 230;           // потолок
+  const takeoffPush  = 0.33;          // C1 по X от старта (угол отрыва)
+  const landingPull  = 0.24;          // C2 ближе к финишу (угол посадки)
+  const lingerAtApex = 0.18;          // «подвисание» на вершине
+
+  const lift = Math.min(heightCap, heightBase + dist*heightK);
+
+  const C1 = { x: x0 + dx*takeoffPush, y: Math.max(y0,y1) + lift };
+  const C2 = { x: x1 - dx*landingPull, y: Math.max(y0,y1) + lift };
+
+  const t0 = performance.now();
+  const prevTransition = chicken.style.transition;
+  chicken.style.transition = 'transform 220ms ease';
+  chicken.style.willChange = 'left, bottom, transform';
+
+  function B(u){
+    const v=1-u;
+    const x = v*v*v*x0 + 3*v*v*u*C1.x + 3*v*u*u*C2.x + u*u*u*x1;
+    const y = v*v*v*y0 + 3*v*v*u*C1.y + 3*v*u*u*C2.y + u*u*u*y1;
+    const dx = -3*v*v*x0 + 3*(v*v - 2*v*u)*C1.x + 3*(2*u*v - u*u)*C2.x + 3*u*u*x1;
+    const dy = -3*v*v*y0 + 3*(v*v - 2*v*u)*C1.y + 3*(2*u*v - u*u)*C2.y + 3*u*u*y1;
+    return {x,y,dx,dy};
+  }
+
+  return new Promise(resolve=>{
+    function tick(now){
+      let t = (now - t0)/duration; if (t>1) t=1;
+
+      // тайминг + лёгкое замедление у апекса
+      let u = easeInOutSine(t);
+      if (lingerAtApex>0){
+        const mid=0.5, range=0.5 - lingerAtApex/2;
+        u = mid + (u-mid) * (u<mid ? (range/mid) : (range/(1-mid)));
+      }
+
+      const p = B(u);
+      chicken.style.left   = p.x + 'px';
+      chicken.style.bottom = p.y + 'px';
+
+      // наклон по касательной
+      const angle = Math.atan2(p.dy, p.dx) * 180/Math.PI;
+      const clamped = Math.max(-24, Math.min(24, angle));
+      chicken.style.transform = `rotate(${clamped}deg)`;
+
+      if (t < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        // конец — БЕЗ жёсткой фиксации x1/y1
+        chicken.style.transform  = 'rotate(0deg)';
+        chicken.style.transition = prevTransition || '';
+        chicken.style.willChange = '';
+        resolve();
+      }
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
+/* ===================== АНИМАЦИИ / ЭКОНОМИКА ===================== */
 function flipToCoin(laneEl){
   if (laneEl.classList.contains('gold-egg')) return;
   if (laneEl.classList.contains('flipped'))  return;
   const img = laneEl.querySelector('img');
   laneEl.classList.add('flipped');
   img.classList.add('flip-out');
-  setTimeout(() => {
+  setTimeout(()=>{
     img.src = 'pics/gold-coin.png';
     img.alt = 'Coin';
     img.classList.remove('flip-out');
     img.classList.add('flip-in');
-    setTimeout(() => img.classList.remove('flip-in'), 200);
-  }, 200);
+    setTimeout(()=> img.classList.remove('flip-in'), 200);
+  },200);
 }
-function animateBalance(from, to, ms = 450){
+function animateBalance(from, to, ms=450){
   const t0 = performance.now();
   const tick = (t) => {
     const k = Math.min((t - t0)/ms, 1);
@@ -557,9 +616,7 @@ function playSparklesOnce(){
   if (!sparklesEl || sparklesPlayed) return;
   sparklesPlayed = true;
   sparkleLayers.forEach(l => {
-    l.style.animation = 'none';
-    void l.offsetWidth;
-    l.style.animation = '';
+    l.style.animation = 'none'; void l.offsetWidth; l.style.animation = '';
     l.style.animationPlayState = 'running';
   });
   sparklesEl.classList.add('active');
@@ -568,61 +625,54 @@ function playSparklesOnce(){
 function openPopup(){
   if (!popup || popupShown) return;
   popupShown = true;
-  popup.style.display    = 'block';
-  popup.style.visibility = 'visible';
-  popup.style.opacity    = '1';
-  popup.style.pointerEvents = 'auto'; 
+  popup.style.display='block'; popup.style.visibility='visible';
+  popup.style.opacity='1'; popup.style.pointerEvents='auto'; 
   popup.removeAttribute('aria-hidden');
   if (popupWin){
-    popupWin.style.display   = 'block';
-    popupWin.style.transform = 'scale(0.92)';
-    popupWin.style.opacity   = '0';
+    popupWin.style.display='block'; popupWin.style.transform='scale(0.92)';
+    popupWin.style.opacity='0';
     requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      popupWin.style.transition = 'transform .25s ease, opacity .25s ease';
-      popupWin.style.transform  = 'scale(1)';
-      popupWin.style.opacity    = '1';
+      popupWin.style.transition='transform .25s ease, opacity .25s ease';
+      popupWin.style.transform='scale(1)'; popupWin.style.opacity='1';
     }));
   }
 }
 
 /* ===================== START POSITION ===================== */
 function setInitialChicken(){
-  const prevTransition = chicken.style.transition;
-  chicken.style.transition = 'none';
+  const prev = chicken.style.transition; chicken.style.transition='none';
 
-  let xScreen;
-  let bottomPx = BASE_BOTTOM;
+  let xScreen, bottomPx = BASE_BOTTOM;
 
   if (START_POS.mode === 'absolute'){
-    xScreen  = START_POS.left;
-    bottomPx = START_POS.bottom;
+    // Стартуем из абсолютной позиции X: -15px (или заданной через API)
+    const leftPx = START_POS.left;                // уже экранный left (не центр!)
+    chicken.style.left = `${leftPx}px`;
+    bottomPx = START_POS.bottom ?? BASE_BOTTOM;
   } else if (START_POS.mode === 'lane0' && lanes[0]){
     const lane0CenterX = centerXInTrack(lanes[0]) + trackX;
     xScreen  = lane0CenterX;
-    const lane0BottomInline = parseInt(lanes[0].style.bottom || '0', 10);
-    bottomPx = Number.isFinite(lane0BottomInline) && lane0BottomInline > 0
-      ? lane0BottomInline
-      : (CHICKEN_BOTTOM_PX[0] ?? BASE_BOTTOM);
-  } else {
+    const b = parseInt(lanes[0].style.bottom||'0',10);
+    bottomPx = Number.isFinite(b)&&b>0 ? b : (CHICKEN_BOTTOM_PX[0] ?? BASE_BOTTOM);
+    setChickenLeftByScreenX(xScreen);
+  } else { // spawn mode
     const spawnCenterX = centerXInTrack(spawnEl) + trackX;
     xScreen  = spawnCenterX;
-    bottomPx = BASE_BOTTOM;
+    setChickenLeftByScreenX(xScreen);
   }
 
-  placeChickenAtScreenX(xScreen);
   chicken.style.bottom = bottomPx + 'px';
-
-  requestAnimationFrame(()=>{ chicken.style.transition = prevTransition || ''; });
+  requestAnimationFrame(()=> chicken.style.transition = prev || '');
 }
 
 /* ===================== INIT ===================== */
-window.addEventListener('load', () => {
+addEventListener('load', () => {
   setInitialChicken();
   balanceEl.textContent = balanceValue.toFixed(2) + ' EUR';
 });
 
-/* (необязательно) подхватывать смену ширины на лету */
-window.addEventListener('resize', () => {
+/* адаптация при ресайзе */
+addEventListener('resize', () => {
   const newCFG = pickConfig();
   if (newCFG !== CFG) {
     CFG = newCFG;
@@ -633,44 +683,46 @@ window.addEventListener('resize', () => {
     SPARKLES_TO_POPUP_DELAY = CFG.SPARKLES_TO_POPUP_DELAY;
     TRACK_FALL_PX           = CFG.TRACK_FALL_PX.slice();
     CHICKEN_BOTTOM_PX       = CFG.CHICKEN_BOTTOM_PX.slice();
-    START_POS               = { ...CFG.START_POS };
-    setInitialChicken(); // переустановим позицию
+    // Сохраняем кастомный START_POS.left, только переустанавливаем позицию
+    setInitialChicken();
   }
 });
 
 /* ===================== MAIN CLICK ===================== */
-goBtn.addEventListener('click', () => {
+goBtn.addEventListener('click', async () => {
   if (step >= lanes.length) return;
 
   goBtn.classList.add('disabled');
-  setTimeout(() => goBtn.classList.remove('disabled'), 400); 
-
+  setTimeout(()=> goBtn.classList.remove('disabled'), 400);
   if (step === 0 && cashBtn) cashBtn.classList.remove('disabled');
 
   const targetLane = lanes[step];
 
-  // 1) X/Y трека
+  // 1) Движение трека
   const laneCenterTrack   = centerXInTrack(targetLane);
   const anchorCenterTrack = centerXInTrack(spawnEl);
   const nextTrackX = clampTrackX(-(laneCenterTrack - anchorCenterTrack));
   const wantedFall = TRACK_FALL_PX[Math.min(step, TRACK_FALL_PX.length-1)] ?? 0;
   const nextTrackY = clampTrackY(wantedFall);
 
-  trackX = nextTrackX;
-  trackY = nextTrackY;
+  trackX = nextTrackX; trackY = nextTrackY;
   track.style.transform = `translate3d(${trackX}px, ${trackY}px, 0)`;
 
-  // 2) Курица (центр цели + смещение вправо, и точный bottom)
-  const laneCenterScreenX = laneCenterTrack + trackX;
-  placeChickenAtScreenX(laneCenterScreenX);
-  const wantedChickenBottom = CHICKEN_BOTTOM_PX[Math.min(step, CHICKEN_BOTTOM_PX.length-1)];
-  chicken.style.bottom = (wantedChickenBottom ?? BASE_BOTTOM) + 'px';
-  hop();
+  // 2) Целимся ПО X в центр лейна (учитывая текущий trackX)
+  const x1 = laneCenterLeftOnScreen(targetLane);
+  const y1 = (CHICKEN_BOTTOM_PX[Math.min(step, CHICKEN_BOTTOM_PX.length-1)] ?? BASE_BOTTOM);
 
-  // 3) Флип
+  // текущая позиция
+  const x0 = parseFloat(chicken.style.left)   || (START_POS.mode==='absolute' ? START_POS.left : 0);
+  const y0 = parseFloat(chicken.style.bottom) || BASE_BOTTOM;
+
+  // 3) Полёт по Безье — ПО X к центру лейна, без финального «снапа»
+  await jumpBezier({ x0, y0, x1, y1, duration: 520, safetyMargin: 84 });
+
+  // 4) Флип
   flipToCoin(targetLane);
 
-  // 4) Баланс
+  // 5) Баланс
   const mult = MULTS[step] || 1;
   const from = balanceValue;
   let next   = preciseMul(balanceValue, mult);
@@ -678,13 +730,10 @@ goBtn.addEventListener('click', () => {
   balanceValue = next;
   animateBalance(from, next, 450);
 
-  // 5) Финал
+  // 6) Финал
   if (step === lanes.length - 1 || targetLane.classList.contains('gold-egg')){
-
-    chicken.classList.remove('celebrate');
-    void chicken.offsetWidth; // сброс анимации
+    chicken.classList.remove('celebrate'); void chicken.offsetWidth;
     chicken.classList.add('celebrate');
-
     playSparklesOnce();
     setTimeout(openPopup, SPARKLES_TO_POPUP_DELAY);
   }
@@ -692,8 +741,39 @@ goBtn.addEventListener('click', () => {
   step++;
 });
 
-    </script>
+/* ===================== API: управление спавном КУРИЦЫ по X ===================== */
+/*
+  Тебе нужно управлять именно X позиции спавна курицы.
+  Для этого используем START_POS.mode='absolute' и поле START_POS.left.
+  Эти функции позволяют менять X спавна и переспаунить курицу.
+*/
+function setSpawnChickenLeft(px){
+  START_POS.mode  = 'absolute';
+  START_POS.left  = Math.round(px);
+  // bottom оставляем тем же, либо можешь задать: START_POS.bottom = число;
+}
+function setSpawnChickenBottom(px){
+  START_POS.bottom = Math.round(px);
+}
+function respawnChicken({preserveY=false} = {}){
+  const prev = chicken.style.transition;
+  chicken.style.transition = 'none';
+  // ставим курицу в точку спавна по X
+  chicken.style.left = `${START_POS.left}px`;
+  if (!preserveY){
+    chicken.style.bottom = (START_POS.bottom ?? BASE_BOTTOM) + 'px';
+  }
+  requestAnimationFrame(()=> chicken.style.transition = prev || '');
+}
 
+/* экспорт для удобства в консоли */
+window.GameSpawn = {
+  setSpawnChickenLeft,    // пример: GameSpawn.setSpawnChickenLeft(-15)
+  setSpawnChickenBottom,  // пример: GameSpawn.setSpawnChickenBottom(22)
+  respawnChicken          // пример: GameSpawn.respawnChicken({preserveY:true})
+};
+
+  </script>
 
 
 <div id="preloadjs-container" style="visibility: hidden; position: absolute; height: 10px; width: 10px; overflow: hidden; transform: translate(-10px, -10px);"></div>
