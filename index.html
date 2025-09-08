@@ -402,8 +402,8 @@
   <script src="./index_files/particles.min.js"></script>
   <script src="./index_files/index.js"></script>
 
-  <script>
-    /* ===================== DOM ===================== */
+<script>
+  /* ===================== DOM ===================== */
 const goBtn     = document.getElementById('go-btn');
 const cashBtn   = document.getElementById('cash-btn');
 const balanceEl = document.getElementById('balance');
@@ -511,68 +511,91 @@ function laneCenterLeftOnScreen(laneEl){
 }
 
 /* ===================== БЕЗЬЕ-ПРЫЖОК (плавный, без финального «снапа») ===================== */
-function easeInOutSine(t){ return 0.5 - 0.5*Math.cos(Math.PI*t); }
+/* S-curve с нулевыми производными в 0 и 1 (очень плавный старт/финиш) */
+function smootherstep(t){
+  t = Math.max(0, Math.min(1, t));
+  return t*t*t*(t*(t*6 - 15) + 10); // 6t^5 - 15t^4 + 10t^3
+}
 
-/** плавный прыжок по кубической Безье: углы старта/посадки + лёгкое «подвисание» у апекса */
-function jumpBezier({ x0, y0, x1, y1, duration=520, safetyMargin=84 }) {
+/* мягкий bias к апексу без «ступеньки» (всегда монотонен) */
+function apexBias(u, k = 0.16){
+  if (k <= 0) return u;
+  const a = 0.5;                    // центр у апекса
+  const b = Math.max(0.01, 1 - k);  // чем меньше b, тем сильнее «подвисание»
+  return a + (u - a) * b;
+}
+
+/** Плавный прыжок по кубической Безье: корректные углы старта/посадки + апекс-bias. */
+function jumpBezier({ x0, y0, x1, y1, duration = 560, safetyMargin = 84 }) {
   const dx = x1 - x0;
   const dy = y1 - y0;
   const dist = Math.hypot(dx, dy);
 
-  // форма кривой
-  const heightBase   = safetyMargin;  // базовый подъём
-  const heightK      = 0.28;          // рост высоты от дистанции
-  const heightCap    = 230;           // потолок
-  const takeoffPush  = 0.33;          // C1 по X от старта (угол отрыва)
-  const landingPull  = 0.24;          // C2 ближе к финишу (угол посадки)
-  const lingerAtApex = 0.18;          // «подвисание» на вершине
+  // форма кривой (слегка подправлены коэффициенты для более «пружинного» полёта)
+  const heightBase   = safetyMargin;   // базовый подъём
+  const heightK      = 0.32;           // рост высоты с дистанцией
+  const heightCap    = 240;            // потолок
+  const takeoffPush  = 0.30;           // C1 ближе к старту
+  const landingPull  = 0.22;           // C2 ближе к финишу
+  const apexHold     = 0.16;           // мягкое «подвисание» у апекса
 
-  const lift = Math.min(heightCap, heightBase + dist*heightK);
+  const lift = Math.min(heightCap, heightBase + dist * heightK);
 
-  const C1 = { x: x0 + dx*takeoffPush, y: Math.max(y0,y1) + lift };
-  const C2 = { x: x1 - dx*landingPull, y: Math.max(y0,y1) + lift };
+  const maxY = Math.max(y0, y1);
+  const C1 = { x: x0 + dx * takeoffPush, y: maxY + lift };
+  const C2 = { x: x1 - dx * landingPull, y: maxY + lift };
+
+  // сглаживание наклона (экспоненциальный фильтр)
+  let lastAngle = 0;
 
   const t0 = performance.now();
   const prevTransition = chicken.style.transition;
-  chicken.style.transition = 'transform 220ms ease';
+  const prevWillChange = chicken.style.willChange;
+
+  // убираем CSS-переходы на время rAF-анимации
+  chicken.style.transition = 'none';
   chicken.style.willChange = 'left, bottom, transform';
+  chicken.style.transformOrigin = '50% 60%';
 
   function B(u){
-    const v=1-u;
+    const v = 1 - u;
     const x = v*v*v*x0 + 3*v*v*u*C1.x + 3*v*u*u*C2.x + u*u*u*x1;
     const y = v*v*v*y0 + 3*v*v*u*C1.y + 3*v*u*u*C2.y + u*u*u*y1;
-    const dx = -3*v*v*x0 + 3*(v*v - 2*v*u)*C1.x + 3*(2*u*v - u*u)*C2.x + 3*u*u*x1;
-    const dy = -3*v*v*y0 + 3*(v*v - 2*v*u)*C1.y + 3*(2*u*v - u*u)*C2.y + 3*u*u*y1;
-    return {x,y,dx,dy};
+    // производные для касательной
+    const dxdu = -3*v*v*x0 + 3*(v*v - 2*v*u)*C1.x + 3*(2*u*v - u*u)*C2.x + 3*u*u*x1;
+    const dydu = -3*v*v*y0 + 3*(v*v - 2*v*u)*C1.y + 3*(2*u*v - u*u)*C2.y + 3*u*u*y1;
+    return { x, y, dxdu, dydu };
   }
 
-  return new Promise(resolve=>{
+  return new Promise(resolve => {
     function tick(now){
-      let t = (now - t0)/duration; if (t>1) t=1;
+      let t = (now - t0) / duration;
+      if (t > 1) t = 1;
 
-      // тайминг + лёгкое замедление у апекса
-      let u = easeInOutSine(t);
-      if (lingerAtApex>0){
-        const mid=0.5, range=0.5 - lingerAtApex/2;
-        u = mid + (u-mid) * (u<mid ? (range/mid) : (range/(1-mid)));
-      }
+      // плавная шкала времени + мягкий bias к апексу
+      let u = smootherstep(t);
+      u = apexBias(u, apexHold);
 
       const p = B(u);
+
       chicken.style.left   = p.x + 'px';
       chicken.style.bottom = p.y + 'px';
 
-      // наклон по касательной
-      const angle = Math.atan2(p.dy, p.dx) * 180/Math.PI;
-      const clamped = Math.max(-24, Math.min(24, angle));
-      chicken.style.transform = `rotate(${clamped}deg)`;
+      // плавный наклон по касательной с ограничением
+      const rawAngle = Math.atan2(p.dydu, p.dxdu) * 180 / Math.PI;
+      const targetAngle = Math.max(-22, Math.min(22, rawAngle));
+      const alpha = 0.22; // скорость реакции фильтра
+      lastAngle = lastAngle + alpha * (targetAngle - lastAngle);
+      chicken.style.transform = `rotate(${lastAngle.toFixed(2)}deg)`;
 
-      if (t < 1) {
+      if (t < 1){
         requestAnimationFrame(tick);
       } else {
-        // конец — БЕЗ жёсткой фиксации x1/y1
-        chicken.style.transform  = 'rotate(0deg)';
+        // финал: вернуть курицу в нейтральный наклон без «щёлчка»
+        chicken.style.transform = 'rotate(0deg)';
+        // вернуть исходные стили
         chicken.style.transition = prevTransition || '';
-        chicken.style.willChange = '';
+        chicken.style.willChange = prevWillChange || '';
         resolve();
       }
     }
@@ -717,7 +740,7 @@ goBtn.addEventListener('click', async () => {
   const y0 = parseFloat(chicken.style.bottom) || BASE_BOTTOM;
 
   // 3) Полёт по Безье — ПО X к центру лейна, без финального «снапа»
-  await jumpBezier({ x0, y0, x1, y1, duration: 520, safetyMargin: 84 });
+  await jumpBezier({ x0, y0, x1, y1, duration: 560, safetyMargin: 84 });
 
   // 4) Флип
   flipToCoin(targetLane);
@@ -773,8 +796,7 @@ window.GameSpawn = {
   respawnChicken          // пример: GameSpawn.respawnChicken({preserveY:true})
 };
 
-  </script>
-
+</script>
 
 <div id="preloadjs-container" style="visibility: hidden; position: absolute; height: 10px; width: 10px; overflow: hidden; transform: translate(-10px, -10px);"></div>
 </body>
