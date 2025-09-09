@@ -2023,7 +2023,7 @@ html.vn .button span {
 		border: 5px solid transparent;       /* чуть выше, чтобы курица и фишки влезли */
   }
   .chicken {
-    width: 65px;         /* уменьшаем курицу */
+    width: 70px;         /* уменьшаем курицу */
   }
   .lane {
     width: 75px;
@@ -2043,7 +2043,7 @@ html.vn .button span {
     min-height: 240px;
   }
   .chicken {
-    width: 65px;
+    width: 90px;
   }
   .lane {
     width: 70px;
