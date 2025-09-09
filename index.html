@@ -432,7 +432,6 @@ const CONFIG = {
     SPARKLES_TO_POPUP_DELAY: 1000,
     TRACK_FALL_PX:     [100, 200, 305, 415, 530, 640],
     CHICKEN_BOTTOM_PX: [ 0,  12,  14,   0,  -8,  -15],
-    // ВАЖНО: стартуем в абсолютной позиции по X
     START_POS: { mode: 'absolute', left: -15, bottom: 22 }
   },
   mobile: {
@@ -442,7 +441,7 @@ const CONFIG = {
     CHICKEN_X_OFFSET: 48,
     SPARKLES_TO_POPUP_DELAY: 1000,
     TRACK_FALL_PX:     [100, 205, 310, 430, 510, 640],
-    CHICKEN_BOTTOM_PX: [-8,  1,  4,  -15,  28, -30],
+    CHICKEN_BOTTOM_PX: [-10,  -4,  0,  -22,  5, -25],
     START_POS: { mode: 'absolute', left: 22, bottom: 15 }
   }
 };
@@ -468,10 +467,41 @@ let CHICKEN_X_OFFSET        = CFG.CHICKEN_X_OFFSET;
 let SPARKLES_TO_POPUP_DELAY = CFG.SPARKLES_TO_POPUP_DELAY;
 let TRACK_FALL_PX           = CFG.TRACK_FALL_PX.slice();
 let CHICKEN_BOTTOM_PX       = CFG.CHICKEN_BOTTOM_PX.slice();
-let START_POS               = { ...CFG.START_POS }; // тут храним X спавна курицы
+let START_POS               = { ...CFG.START_POS };
 
 /* ===================== ECON ===================== */
 const MULTS = [1.50, 1.85, 1.95, 2.00, 2.10, 2.20];
+
+/* ===================== LANDING CONTROL ===================== */
+/** Поднимаем точку приземления относительно CHICKEN_BOTTOM_PX[step] (по шагам). */
+let LANDING_RAISE_PX = [30, 28, 28, 40, 43, 40];
+function setLandingRaise(stepOrArray, px){
+  if (Array.isArray(stepOrArray)) LANDING_RAISE_PX = stepOrArray.slice();
+  else LANDING_RAISE_PX[stepOrArray] = px;
+}
+
+/* ===================== ARC SHAPE (дуга) ===================== */
+/** Базовая высота апекса и рост от дальности (в пикселях). */
+let ARC_PEAK_PX_BASE = 76;
+let ARC_PEAK_PX_K    = 0.22;
+let ARC_PEAK_PX_CAP  = 220;
+/** Смещение вершины вдоль X (0..1). 0.5 — центр, 0.6 — ближе к финишу. */
+let ARC_PEAK_BIAS    = 0.58;
+/** Наклон (по умолчанию выкл). */
+let ARC_ENABLE_TILT  = false;
+let ARC_MAX_TILT_DEG = 10;
+/** Доп. подъём вершины дуги по шагам (чтобы «перешагнуть» декор). */
+let ARC_EXTRA_LIFT_PX = [0, 6, 0, 0, 0, 0]; // ← для второго прыжка добавлен запас
+
+function setArcHeight(base, k = ARC_PEAK_PX_K, cap = ARC_PEAK_PX_CAP){
+  ARC_PEAK_PX_BASE = base; ARC_PEAK_PX_K = k; ARC_PEAK_PX_CAP = cap;
+}
+function setArcBias(bias){ ARC_PEAK_BIAS = Math.max(0.2, Math.min(0.8, bias)); }
+function setArcTilt(enabled, maxDeg=8){ ARC_ENABLE_TILT = !!enabled; ARC_MAX_TILT_DEG = maxDeg; }
+function setArcExtraLift(stepOrArray, px){
+  if (Array.isArray(stepOrArray)) ARC_EXTRA_LIFT_PX = stepOrArray.slice();
+  else ARC_EXTRA_LIFT_PX[stepOrArray] = px;
+}
 
 /* ===================== STATE ===================== */
 let step   = 0;
@@ -510,96 +540,115 @@ function laneCenterLeftOnScreen(laneEl){
   return xScreen - CHICKEN_HALF_W + CHICKEN_X_OFFSET;
 }
 
-/* ===================== БЕЗЬЕ-ПРЫЖОК (плавный, без финального «снапа») ===================== */
-/* S-curve с нулевыми производными в 0 и 1 (очень плавный старт/финиш) */
-function smootherstep(t){
-  t = Math.max(0, Math.min(1, t));
-  return t*t*t*(t*(t*6 - 15) + 10); // 6t^5 - 15t^4 + 10t^3
-}
-
-/* мягкий bias к апексу без «ступеньки» (всегда монотонен) */
-function apexBias(u, k = 0.16){
-  if (k <= 0) return u;
-  const a = 0.5;                    // центр у апекса
-  const b = Math.max(0.01, 1 - k);  // чем меньше b, тем сильнее «подвисание»
-  return a + (u - a) * b;
-}
-
-/** Плавный прыжок по кубической Безье: корректные углы старта/посадки + апекс-bias. */
-function jumpBezier({ x0, y0, x1, y1, duration = 560, safetyMargin = 84 }) {
-  const dx = x1 - x0;
-  const dy = y1 - y0;
+/* ===================== ДУГООБРАЗНЫЙ ПРЫЖОК ===================== */
+/**
+ * Квадратная Безье с почти равномерной скоростью по дуге.
+ * — Без «подвисаний» и торможения у финиша
+ * — Ручки: ARC_PEAK_* (высота/смещение апекса) + extraLift
+ * — Лёгкая квантизация до 0.5px против дрожи
+ */
+function jumpBezier({
+  x0, y0, x1, y1,
+  duration = 520,
+  extraLift = 0
+}){
+  const dx = x1 - x0, dy = y1 - y0;
   const dist = Math.hypot(dx, dy);
 
-  // форма кривой (слегка подправлены коэффициенты для более «пружинного» полёта)
-  const heightBase   = safetyMargin;   // базовый подъём
-  const heightK      = 0.32;           // рост высоты с дистанцией
-  const heightCap    = 240;            // потолок
-  const takeoffPush  = 0.30;           // C1 ближе к старту
-  const landingPull  = 0.22;           // C2 ближе к финишу
-  const apexHold     = 0.16;           // мягкое «подвисание» у апекса
+  // контрольная точка (апекс) — формируем дугу
+  const xc = x0 + dx * ARC_PEAK_BIAS;
+  const liftBase = Math.min(ARC_PEAK_PX_CAP, ARC_PEAK_PX_BASE + dist * ARC_PEAK_PX_K);
+  const yc = Math.max(y0, y1) + liftBase + (extraLift || 0);
 
-  const lift = Math.min(heightCap, heightBase + dist * heightK);
+  // квадр. Безье
+  function B(u){
+    const v = 1 - u;
+    const x = v*v*x0 + 2*v*u*xc + u*u*x1;
+    const y = v*v*y0 + 2*v*u*yc + u*u*y1;
+    return {x, y};
+  }
+  // производная (для наклона)
+  function dB(u){
+    const x = 2*(1-u)*(xc - x0) + 2*u*(x1 - xc);
+    const y = 2*(1-u)*(yc - y0) + 2*u*(y1 - yc);
+    return {x, y};
+  }
 
-  const maxY = Math.max(y0, y1);
-  const C1 = { x: x0 + dx * takeoffPush, y: maxY + lift };
-  const C2 = { x: x1 - dx * landingPull, y: maxY + lift };
+  // LUT для почти равномерной скорости по длине дуги
+  const N = 64;
+  const lutU = new Array(N+1);
+  const lutS = new Array(N+1);
+  lutU[0] = 0; lutS[0] = 0;
+  let total = 0, prev = B(0);
+  for (let i=1;i<=N;i++){
+    const u = i/N;
+    const p = B(u);
+    total += Math.hypot(p.x - prev.x, p.y - prev.y);
+    lutU[i] = u; lutS[i] = total; prev = p;
+  }
+  for (let i=0;i<=N;i++) lutS[i] /= total || 1;
 
-  // сглаживание наклона (экспоненциальный фильтр)
-  let lastAngle = 0;
+  function uForProgress(t){
+    let lo = 0, hi = N;
+    while (lo < hi){
+      const mid = (lo + hi) >> 1;
+      if (lutS[mid] < t) lo = mid + 1; else hi = mid;
+    }
+    const i = Math.max(1, lo);
+    const s0 = lutS[i-1], s1 = lutS[i];
+    const u0 = lutU[i-1], u1 = lutU[i];
+    const k  = (t - s0) / ((s1 - s0) || 1);
+    return u0 + (u1 - u0) * k;
+  }
 
   const t0 = performance.now();
+
+  // rAF-анимация
   const prevTransition = chicken.style.transition;
   const prevWillChange = chicken.style.willChange;
-
-  // убираем CSS-переходы на время rAF-анимации
+  const prevTransform  = chicken.style.transform;
   chicken.style.transition = 'none';
   chicken.style.willChange = 'left, bottom, transform';
   chicken.style.transformOrigin = '50% 60%';
 
-  function B(u){
-    const v = 1 - u;
-    const x = v*v*v*x0 + 3*v*v*u*C1.x + 3*v*u*u*C2.x + u*u*u*x1;
-    const y = v*v*v*y0 + 3*v*v*u*C1.y + 3*v*u*u*C2.y + u*u*u*y1;
-    // производные для касательной
-    const dxdu = -3*v*v*x0 + 3*(v*v - 2*v*u)*C1.x + 3*(2*u*v - u*u)*C2.x + 3*u*u*x1;
-    const dydu = -3*v*v*y0 + 3*(v*v - 2*v*u)*C1.y + 3*(2*u*v - u*u)*C2.y + 3*u*u*y1;
-    return { x, y, dxdu, dydu };
-  }
+  let lastAngle = 0;
 
-  return new Promise(resolve => {
-    function tick(now){
-      let t = (now - t0) / duration;
-      if (t > 1) t = 1;
+  return new Promise(resolve=>{
+    function frame(now){
+      let t = (now - t0) / duration; if (t > 1) t = 1;
 
-      // плавная шкала времени + мягкий bias к апексу
-      let u = smootherstep(t);
-      u = apexBias(u, apexHold);
-
+      const u = uForProgress(t);
       const p = B(u);
 
-      chicken.style.left   = p.x + 'px';
-      chicken.style.bottom = p.y + 'px';
+      const x = Math.round(p.x * 2) / 2;
+      const y = Math.round(p.y * 2) / 2;
+      chicken.style.left   = x + 'px';
+      chicken.style.bottom = y + 'px';
 
-      // плавный наклон по касательной с ограничением
-      const rawAngle = Math.atan2(p.dydu, p.dxdu) * 180 / Math.PI;
-      const targetAngle = Math.max(-22, Math.min(22, rawAngle));
-      const alpha = 0.22; // скорость реакции фильтра
-      lastAngle = lastAngle + alpha * (targetAngle - lastAngle);
-      chicken.style.transform = `rotate(${lastAngle.toFixed(2)}deg)`;
+      if (ARC_ENABLE_TILT){
+        const dv = dB(u);
+        const angle = Math.atan2(dv.y, dv.x) * 180/Math.PI;
+        const target = Math.max(-ARC_MAX_TILT_DEG, Math.min(ARC_MAX_TILT_DEG, angle));
+        const alpha = 0.22;
+        lastAngle = lastAngle + alpha * (target - lastAngle);
+        chicken.style.transform = `rotate(${lastAngle.toFixed(2)}deg)`;
+      }
 
       if (t < 1){
-        requestAnimationFrame(tick);
+        requestAnimationFrame(frame);
       } else {
-        // финал: вернуть курицу в нейтральный наклон без «щёлчка»
-        chicken.style.transform = 'rotate(0deg)';
-        // вернуть исходные стили
-        chicken.style.transition = prevTransition || '';
-        chicken.style.willChange = prevWillChange || '';
-        resolve();
+        chicken.style.left   = x1 + 'px';
+        chicken.style.bottom = y1 + 'px';
+        requestAnimationFrame(()=>{
+          chicken.style.transform  = 'rotate(0deg)';
+          chicken.style.transition = prevTransition || '';
+          chicken.style.willChange = prevWillChange || '';
+          chicken.style.transform  = prevTransform  || '';
+          resolve();
+        });
       }
     }
-    requestAnimationFrame(tick);
+    requestAnimationFrame(frame);
   });
 }
 
@@ -668,8 +717,7 @@ function setInitialChicken(){
   let xScreen, bottomPx = BASE_BOTTOM;
 
   if (START_POS.mode === 'absolute'){
-    // Стартуем из абсолютной позиции X: -15px (или заданной через API)
-    const leftPx = START_POS.left;                // уже экранный left (не центр!)
+    const leftPx = START_POS.left;
     chicken.style.left = `${leftPx}px`;
     bottomPx = START_POS.bottom ?? BASE_BOTTOM;
   } else if (START_POS.mode === 'lane0' && lanes[0]){
@@ -678,7 +726,7 @@ function setInitialChicken(){
     const b = parseInt(lanes[0].style.bottom||'0',10);
     bottomPx = Number.isFinite(b)&&b>0 ? b : (CHICKEN_BOTTOM_PX[0] ?? BASE_BOTTOM);
     setChickenLeftByScreenX(xScreen);
-  } else { // spawn mode
+  } else {
     const spawnCenterX = centerXInTrack(spawnEl) + trackX;
     xScreen  = spawnCenterX;
     setChickenLeftByScreenX(xScreen);
@@ -706,7 +754,6 @@ addEventListener('resize', () => {
     SPARKLES_TO_POPUP_DELAY = CFG.SPARKLES_TO_POPUP_DELAY;
     TRACK_FALL_PX           = CFG.TRACK_FALL_PX.slice();
     CHICKEN_BOTTOM_PX       = CFG.CHICKEN_BOTTOM_PX.slice();
-    // Сохраняем кастомный START_POS.left, только переустанавливаем позицию
     setInitialChicken();
   }
 });
@@ -731,21 +778,35 @@ goBtn.addEventListener('click', async () => {
   trackX = nextTrackX; trackY = nextTrackY;
   track.style.transform = `translate3d(${trackX}px, ${trackY}px, 0)`;
 
-  // 2) Целимся ПО X в центр лейна (учитывая текущий trackX)
+  // 2) Цель по X
   const x1 = laneCenterLeftOnScreen(targetLane);
-  const y1 = (CHICKEN_BOTTOM_PX[Math.min(step, CHICKEN_BOTTOM_PX.length-1)] ?? BASE_BOTTOM);
 
-  // текущая позиция
-  const x0 = parseFloat(chicken.style.left)   || (START_POS.mode==='absolute' ? START_POS.left : 0);
-  const y0 = parseFloat(chicken.style.bottom) || BASE_BOTTOM;
+  // 2b) Цель по Y: базовый + подъём посадки
+  const baseY = (CHICKEN_BOTTOM_PX[Math.min(step, CHICKEN_BOTTOM_PX.length-1)] ?? BASE_BOTTOM);
+  const raise = Array.isArray(LANDING_RAISE_PX)
+    ? (LANDING_RAISE_PX[Math.min(step, LANDING_RAISE_PX.length-1)] || 0)
+    : (LANDING_RAISE_PX || 0);
+  const y1 = baseY + raise;
 
-  // 3) Полёт по Безье — ПО X к центру лейна, без финального «снапа»
-  await jumpBezier({ x0, y0, x1, y1, duration: 560, safetyMargin: 84 });
+  // 3) Текущая позиция
+  const hasX = chicken.style.left && chicken.style.left.endsWith('px');
+  const hasY = chicken.style.bottom && chicken.style.bottom.endsWith('px');
+  const x0 = hasX ? parseFloat(chicken.style.left)   : (START_POS.mode==='absolute' ? START_POS.left   : 0);
+  const y0 = hasY ? parseFloat(chicken.style.bottom) : (START_POS.bottom ?? BASE_BOTTOM);
 
-  // 4) Флип
+  // 3b) Доп. подъём апекса именно для этого шага или лейна (через data-атрибут)
+  const laneLiftAttr = parseInt(targetLane.dataset.arcLift || '0', 10) || 0;
+  const extraLift = (Array.isArray(ARC_EXTRA_LIFT_PX)
+    ? (ARC_EXTRA_LIFT_PX[Math.min(step, ARC_EXTRA_LIFT_PX.length - 1)] || 0)
+    : (ARC_EXTRA_LIFT_PX || 0)) + laneLiftAttr;
+
+  // 4) Полёт — дугообразный, без «парашюта», с запасом по высоте при необходимости
+  await jumpBezier({ x0, y0, x1, y1, duration: 520, extraLift });
+
+  // 5) Флип
   flipToCoin(targetLane);
 
-  // 5) Баланс
+  // 6) Баланс
   const mult = MULTS[step] || 1;
   const from = balanceValue;
   let next   = preciseMul(balanceValue, mult);
@@ -753,7 +814,7 @@ goBtn.addEventListener('click', async () => {
   balanceValue = next;
   animateBalance(from, next, 450);
 
-  // 6) Финал
+  // 7) Финал
   if (step === lanes.length - 1 || targetLane.classList.contains('gold-egg')){
     chicken.classList.remove('celebrate'); void chicken.offsetWidth;
     chicken.classList.add('celebrate');
@@ -764,16 +825,10 @@ goBtn.addEventListener('click', async () => {
   step++;
 });
 
-/* ===================== API: управление спавном КУРИЦЫ по X ===================== */
-/*
-  Тебе нужно управлять именно X позиции спавна курицы.
-  Для этого используем START_POS.mode='absolute' и поле START_POS.left.
-  Эти функции позволяют менять X спавна и переспаунить курицу.
-*/
+/* ===================== API: спавн и ручки дуги ===================== */
 function setSpawnChickenLeft(px){
   START_POS.mode  = 'absolute';
   START_POS.left  = Math.round(px);
-  // bottom оставляем тем же, либо можешь задать: START_POS.bottom = число;
 }
 function setSpawnChickenBottom(px){
   START_POS.bottom = Math.round(px);
@@ -781,7 +836,6 @@ function setSpawnChickenBottom(px){
 function respawnChicken({preserveY=false} = {}){
   const prev = chicken.style.transition;
   chicken.style.transition = 'none';
-  // ставим курицу в точку спавна по X
   chicken.style.left = `${START_POS.left}px`;
   if (!preserveY){
     chicken.style.bottom = (START_POS.bottom ?? BASE_BOTTOM) + 'px';
@@ -789,11 +843,16 @@ function respawnChicken({preserveY=false} = {}){
   requestAnimationFrame(()=> chicken.style.transition = prev || '');
 }
 
-/* экспорт для удобства в консоли */
 window.GameSpawn = {
-  setSpawnChickenLeft,    // пример: GameSpawn.setSpawnChickenLeft(-15)
-  setSpawnChickenBottom,  // пример: GameSpawn.setSpawnChickenBottom(22)
-  respawnChicken          // пример: GameSpawn.respawnChicken({preserveY:true})
+  setSpawnChickenLeft,
+  setSpawnChickenBottom,
+  respawnChicken,
+  // управление посадкой и дугой:
+  setLandingRaise,        // setLandingRaise([..]) или setLandingRaise(2, 34)
+  setArcHeight,           // setArcHeight(84, 0.24, 240)
+  setArcBias,             // setArcBias(0.6)
+  setArcTilt,             // setArcTilt(true, 6)
+  setArcExtraLift         // setArcExtraLift(1, 32) — больше запас на 2-м прыжке
 };
 
 </script>

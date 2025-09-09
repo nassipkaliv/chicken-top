@@ -1979,8 +1979,8 @@ html.vn .button span {
 .lane img.flip-in { transform: rotateY(0deg);   }
 
 .chicken{
-  will-change: left, bottom;
-  transition: left .45s ease;  
+  will-change: left, bottom, transform;
+  transition: none;         
 }
 
 @keyframes chickenCelebrate {
