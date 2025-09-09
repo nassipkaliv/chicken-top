@@ -403,7 +403,7 @@
   <script src="./index_files/index.js"></script>
 
 <script>
-  /* ===================== DOM ===================== */
+/* ===================== DOM ===================== */
 const goBtn     = document.getElementById('go-btn');
 const cashBtn   = document.getElementById('cash-btn');
 const balanceEl = document.getElementById('balance');
@@ -447,6 +447,7 @@ const CONFIG = {
 };
 function pickConfig(){ return matchMedia('(max-width:540px)').matches ? CONFIG.mobile : CONFIG.desktop; }
 let CFG = pickConfig();
+let isMobile = matchMedia('(max-width:540px)').matches;
 
 /* мобильные bottom'ы у лейнов */
 function adjustLanesForMobile(){
@@ -473,35 +474,32 @@ let START_POS               = { ...CFG.START_POS };
 const MULTS = [1.50, 1.85, 1.95, 2.00, 2.10, 2.20];
 
 /* ===================== LANDING CONTROL ===================== */
-/** Поднимаем точку приземления относительно CHICKEN_BOTTOM_PX[step] (по шагам). */
-let LANDING_RAISE_PX = [30, 28, 28, 40, 43, 40];
-function setLandingRaise(stepOrArray, px){
-  if (Array.isArray(stepOrArray)) LANDING_RAISE_PX = stepOrArray.slice();
-  else LANDING_RAISE_PX[stepOrArray] = px;
+const LANDING_RAISE_DESKTOP = [30, 28, 28, 40, 43, 40];
+const LANDING_RAISE_MOBILE  = [30, 28, 29, 40, 41, 40]; // выше посадка на мобиле
+function landingRaiseFor(step){
+  const arr = isMobile ? LANDING_RAISE_MOBILE : LANDING_RAISE_DESKTOP;
+  const i = Math.min(step, arr.length-1);
+  return arr[i] || 0;
 }
 
-/* ===================== ARC SHAPE (дуга) ===================== */
-/** Базовая высота апекса и рост от дальности (в пикселях). */
-let ARC_PEAK_PX_BASE = 76;
-let ARC_PEAK_PX_K    = 0.22;
-let ARC_PEAK_PX_CAP  = 220;
-/** Смещение вершины вдоль X (0..1). 0.5 — центр, 0.6 — ближе к финишу. */
-let ARC_PEAK_BIAS    = 0.58;
-/** Наклон (по умолчанию выкл). */
-let ARC_ENABLE_TILT  = false;
-let ARC_MAX_TILT_DEG = 10;
-/** Доп. подъём вершины дуги по шагам (чтобы «перешагнуть» декор). */
-let ARC_EXTRA_LIFT_PX = [0, 6, 0, 0, 0, 0]; // ← для второго прыжка добавлен запас
+/* ===================== ARC SHAPE ===================== */
+/* Desktop дуга (квадр. Безье) */
+let ARC_PEAK_PX_BASE_DESK = 76;
+let ARC_PEAK_PX_K_DESK    = 0.22;
+let ARC_PEAK_PX_CAP_DESK  = 240;
+let ARC_PEAK_BIAS_DESK    = 0.58;
 
-function setArcHeight(base, k = ARC_PEAK_PX_K, cap = ARC_PEAK_PX_CAP){
-  ARC_PEAK_PX_BASE = base; ARC_PEAK_PX_K = k; ARC_PEAK_PX_CAP = cap;
-}
-function setArcBias(bias){ ARC_PEAK_BIAS = Math.max(0.2, Math.min(0.8, bias)); }
-function setArcTilt(enabled, maxDeg=8){ ARC_ENABLE_TILT = !!enabled; ARC_MAX_TILT_DEG = maxDeg; }
-function setArcExtraLift(stepOrArray, px){
-  if (Array.isArray(stepOrArray)) ARC_EXTRA_LIFT_PX = stepOrArray.slice();
-  else ARC_EXTRA_LIFT_PX[stepOrArray] = px;
-}
+/* Mobile дуга (КУБИЧЕСКАЯ Безье с ранним подъёмом) */
+let ARC_PEAK_PX_BASE_MOB  = 118;  // базовая высота апекса
+let ARC_PEAK_PX_K_MOB     = 0.34; // рост с дальностью
+let ARC_PEAK_PX_CAP_MOB   = 135;  // потолок
+let ARC_MOB_S1            = 0.12; // X первой контрольной точки (ранний подъём)
+let ARC_MOB_S2            = 0.20; // X второй контрольной точки (ближе к финишу)
+let ARC_MOB_START_BOOST   = 32;   // доп. подъём только у первой контрольной точки
+let MOBILE_CLEAR_MIN_LIFT = 170;  // гарантированный минимум над max(y0,y1) для всей дуги
+
+/* Точечная прибавка к высоте по шагам (общая для обеих платформ) */
+let ARC_EXTRA_LIFT_PX_GLOBAL = [0, 0, 0, 0, 0, 0];
 
 /* ===================== STATE ===================== */
 let step   = 0;
@@ -541,41 +539,76 @@ function laneCenterLeftOnScreen(laneEl){
 }
 
 /* ===================== ДУГООБРАЗНЫЙ ПРЫЖОК ===================== */
-/**
- * Квадратная Безье с почти равномерной скоростью по дуге.
- * — Без «подвисаний» и торможения у финиша
- * — Ручки: ARC_PEAK_* (высота/смещение апекса) + extraLift
- * — Лёгкая квантизация до 0.5px против дрожи
- */
 function jumpBezier({
   x0, y0, x1, y1,
   duration = 520,
-  extraLift = 0
+  extraLift = 0,
+  biasOverride = null
 }){
   const dx = x1 - x0, dy = y1 - y0;
   const dist = Math.hypot(dx, dy);
 
-  // контрольная точка (апекс) — формируем дугу
-  const xc = x0 + dx * ARC_PEAK_BIAS;
-  const liftBase = Math.min(ARC_PEAK_PX_CAP, ARC_PEAK_PX_BASE + dist * ARC_PEAK_PX_K);
-  const yc = Math.max(y0, y1) + liftBase + (extraLift || 0);
+  // Выбор параметров под устройство
+  const isMob = isMobile;
 
-  // квадр. Безье
-  function B(u){
-    const v = 1 - u;
-    const x = v*v*x0 + 2*v*u*xc + u*u*x1;
-    const y = v*v*y0 + 2*v*u*yc + u*u*y1;
-    return {x, y};
-  }
-  // производная (для наклона)
-  function dB(u){
-    const x = 2*(1-u)*(xc - x0) + 2*u*(x1 - xc);
-    const y = 2*(1-u)*(yc - y0) + 2*u*(y1 - yc);
-    return {x, y};
+  // ---- Геометрия дуги ----
+  // Высота апекса / лифта над max(y0,y1)
+  const BASE = isMob ? ARC_PEAK_PX_BASE_MOB : ARC_PEAK_PX_BASE_DESK;
+  const K    = isMob ? ARC_PEAK_PX_K_MOB    : ARC_PEAK_PX_K_DESK;
+  const CAP  = isMob ? ARC_PEAK_PX_CAP_MOB  : ARC_PEAK_PX_CAP_DESK;
+  let lift   = BASE + K * dist + (extraLift || 0);
+  if (isMob) lift = Math.max(lift, MOBILE_CLEAR_MIN_LIFT);
+  lift = Math.min(lift, CAP);
+
+  const yApex = Math.max(y0, y1) + lift;
+
+  // Контрольные точки:
+  // Desktop — квадратичная Безье (одна контрольная точка по bias).
+  // Mobile  — КУБИЧЕСКАЯ Безье: ранний подъём через C1 ближе к старту и чуть выше апекса.
+  let B, dB;
+  if (!isMob){
+    const BIAS = (biasOverride != null ? biasOverride : ARC_PEAK_BIAS_DESK);
+    const xc = x0 + dx * BIAS;
+    const yc = yApex;
+
+    B = (u)=>{
+      const v = 1 - u;
+      return {
+        x: v*v*x0 + 2*v*u*xc + u*u*x1,
+        y: v*v*y0 + 2*v*u*yc + u*u*y1
+      };
+    };
+    dB = (u)=>{
+      return {
+        x: 2*(1-u)*(xc - x0) + 2*u*(x1 - xc),
+        y: 2*(1-u)*(yc - y0) + 2*u*(y1 - yc)
+      };
+    };
+  } else {
+    const s1 = ARC_MOB_S1, s2 = ARC_MOB_S2;
+    const C1 = { x: x0 + dx * s1, y: yApex + ARC_MOB_START_BOOST }; // выше => ранний clearance
+    const C2 = { x: x0 + dx * s2, y: yApex };
+
+    B = (u)=>{
+      const v  = 1 - u;
+      const v2 = v*v, u2 = u*u;
+      const v3 = v2*v, u3 = u2*u;
+      return {
+        x: v3*x0 + 3*v2*u*C1.x + 3*v*u2*C2.x + u3*x1,
+        y: v3*y0 + 3*v2*u*C1.y + 3*v*u2*C2.y + u3*y1
+      };
+    };
+    dB = (u)=>{
+      const v  = 1 - u;
+      return {
+        x: 3*v*v*(C1.x - x0) + 6*v*u*(C2.x - C1.x) + 3*u*u*(x1 - C2.x),
+        y: 3*v*v*(C1.y - y0) + 6*v*u*(C2.y - C1.y) + 3*u*u*(y1 - C2.y)
+      };
+    };
   }
 
-  // LUT для почти равномерной скорости по длине дуги
-  const N = 64;
+  // ---- LUT для почти равномерной скорости по длине дуги ----
+  const N = 80;
   const lutU = new Array(N+1);
   const lutS = new Array(N+1);
   lutU[0] = 0; lutS[0] = 0;
@@ -601,17 +634,12 @@ function jumpBezier({
     return u0 + (u1 - u0) * k;
   }
 
+  // ---- rAF-анимация ----
   const t0 = performance.now();
-
-  // rAF-анимация
   const prevTransition = chicken.style.transition;
   const prevWillChange = chicken.style.willChange;
-  const prevTransform  = chicken.style.transform;
   chicken.style.transition = 'none';
-  chicken.style.willChange = 'left, bottom, transform';
-  chicken.style.transformOrigin = '50% 60%';
-
-  let lastAngle = 0;
+  chicken.style.willChange = 'left, bottom';
 
   return new Promise(resolve=>{
     function frame(now){
@@ -620,19 +648,8 @@ function jumpBezier({
       const u = uForProgress(t);
       const p = B(u);
 
-      const x = Math.round(p.x * 2) / 2;
-      const y = Math.round(p.y * 2) / 2;
-      chicken.style.left   = x + 'px';
-      chicken.style.bottom = y + 'px';
-
-      if (ARC_ENABLE_TILT){
-        const dv = dB(u);
-        const angle = Math.atan2(dv.y, dv.x) * 180/Math.PI;
-        const target = Math.max(-ARC_MAX_TILT_DEG, Math.min(ARC_MAX_TILT_DEG, angle));
-        const alpha = 0.22;
-        lastAngle = lastAngle + alpha * (target - lastAngle);
-        chicken.style.transform = `rotate(${lastAngle.toFixed(2)}deg)`;
-      }
+      chicken.style.left   = (Math.round(p.x * 2) / 2) + 'px';
+      chicken.style.bottom = (Math.round(p.y * 2) / 2) + 'px';
 
       if (t < 1){
         requestAnimationFrame(frame);
@@ -640,10 +657,8 @@ function jumpBezier({
         chicken.style.left   = x1 + 'px';
         chicken.style.bottom = y1 + 'px';
         requestAnimationFrame(()=>{
-          chicken.style.transform  = 'rotate(0deg)';
           chicken.style.transition = prevTransition || '';
           chicken.style.willChange = prevWillChange || '';
-          chicken.style.transform  = prevTransform  || '';
           resolve();
         });
       }
@@ -698,7 +713,7 @@ function openPopup(){
   if (!popup || popupShown) return;
   popupShown = true;
   popup.style.display='block'; popup.style.visibility='visible';
-  popup.style.opacity='1'; popup.style.pointerEvents='auto'; 
+  popup.style.opacity='1'; popup.style.pointerEvents='auto';
   popup.removeAttribute('aria-hidden');
   if (popupWin){
     popupWin.style.display='block'; popupWin.style.transform='scale(0.92)';
@@ -745,6 +760,8 @@ addEventListener('load', () => {
 /* адаптация при ресайзе */
 addEventListener('resize', () => {
   const newCFG = pickConfig();
+  isMobile = matchMedia('(max-width:540px)').matches;
+
   if (newCFG !== CFG) {
     CFG = newCFG;
     MAX_TRACK_WIDTH         = CFG.MAX_TRACK_WIDTH;
@@ -778,15 +795,10 @@ goBtn.addEventListener('click', async () => {
   trackX = nextTrackX; trackY = nextTrackY;
   track.style.transform = `translate3d(${trackX}px, ${trackY}px, 0)`;
 
-  // 2) Цель по X
+  // 2) Цели
   const x1 = laneCenterLeftOnScreen(targetLane);
-
-  // 2b) Цель по Y: базовый + подъём посадки
   const baseY = (CHICKEN_BOTTOM_PX[Math.min(step, CHICKEN_BOTTOM_PX.length-1)] ?? BASE_BOTTOM);
-  const raise = Array.isArray(LANDING_RAISE_PX)
-    ? (LANDING_RAISE_PX[Math.min(step, LANDING_RAISE_PX.length-1)] || 0)
-    : (LANDING_RAISE_PX || 0);
-  const y1 = baseY + raise;
+  const y1 = baseY + landingRaiseFor(step);
 
   // 3) Текущая позиция
   const hasX = chicken.style.left && chicken.style.left.endsWith('px');
@@ -794,19 +806,20 @@ goBtn.addEventListener('click', async () => {
   const x0 = hasX ? parseFloat(chicken.style.left)   : (START_POS.mode==='absolute' ? START_POS.left   : 0);
   const y0 = hasY ? parseFloat(chicken.style.bottom) : (START_POS.bottom ?? BASE_BOTTOM);
 
-  // 3b) Доп. подъём апекса именно для этого шага или лейна (через data-атрибут)
+  // 4) Доп. подъём апекса для конкретного лейна и глобальный
   const laneLiftAttr = parseInt(targetLane.dataset.arcLift || '0', 10) || 0;
-  const extraLift = (Array.isArray(ARC_EXTRA_LIFT_PX)
-    ? (ARC_EXTRA_LIFT_PX[Math.min(step, ARC_EXTRA_LIFT_PX.length - 1)] || 0)
-    : (ARC_EXTRA_LIFT_PX || 0)) + laneLiftAttr;
+  const extraLiftGlobal = (Array.isArray(ARC_EXTRA_LIFT_PX_GLOBAL)
+    ? (ARC_EXTRA_LIFT_PX_GLOBAL[Math.min(step, ARC_EXTRA_LIFT_PX_GLOBAL.length - 1)] || 0)
+    : (ARC_EXTRA_LIFT_PX_GLOBAL || 0));
+  const extraLift = extraLiftGlobal + laneLiftAttr;
 
-  // 4) Полёт — дугообразный, без «парашюта», с запасом по высоте при необходимости
+  // 5) Полёт — мобильная кубическая дуга с ранним подъёмом / десктопная квадр. дуга
   await jumpBezier({ x0, y0, x1, y1, duration: 520, extraLift });
 
-  // 5) Флип
+  // 6) Флип
   flipToCoin(targetLane);
 
-  // 6) Баланс
+  // 7) Баланс
   const mult = MULTS[step] || 1;
   const from = balanceValue;
   let next   = preciseMul(balanceValue, mult);
@@ -814,7 +827,7 @@ goBtn.addEventListener('click', async () => {
   balanceValue = next;
   animateBalance(from, next, 450);
 
-  // 7) Финал
+  // 8) Финал
   if (step === lanes.length - 1 || targetLane.classList.contains('gold-egg')){
     chicken.classList.remove('celebrate'); void chicken.offsetWidth;
     chicken.classList.add('celebrate');
@@ -825,7 +838,7 @@ goBtn.addEventListener('click', async () => {
   step++;
 });
 
-/* ===================== API: спавн и ручки дуги ===================== */
+/* ===================== API ===================== */
 function setSpawnChickenLeft(px){
   START_POS.mode  = 'absolute';
   START_POS.left  = Math.round(px);
@@ -846,17 +859,12 @@ function respawnChicken({preserveY=false} = {}){
 window.GameSpawn = {
   setSpawnChickenLeft,
   setSpawnChickenBottom,
-  respawnChicken,
-  // управление посадкой и дугой:
-  setLandingRaise,        // setLandingRaise([..]) или setLandingRaise(2, 34)
-  setArcHeight,           // setArcHeight(84, 0.24, 240)
-  setArcBias,             // setArcBias(0.6)
-  setArcTilt,             // setArcTilt(true, 6)
-  setArcExtraLift         // setArcExtraLift(1, 32) — больше запас на 2-м прыжке
+  respawnChicken
 };
-
 </script>
 
+
+  
 <div id="preloadjs-container" style="visibility: hidden; position: absolute; height: 10px; width: 10px; overflow: hidden; transform: translate(-10px, -10px);"></div>
 </body>
 </html>
