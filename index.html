@@ -482,13 +482,15 @@ function landingRaiseFor(step){
   return arr[i] || 0;
 }
 
-/* ===================== REALISTIC ARC (БАЛЛИСТИКА) ===================== */
-/* ↓↓↓ УМЕНЬШЕННАЯ высота прыжка: понизили «гравитацию» ↓↓↓ */
-const G_DESKTOP = 1650; // было 2000 — апекс ниже, дуга естественная
-const G_MOBILE  = 1550; // было 1900 — апекс ниже на мобилке
-
-/* Точечный твик высоты по шагам (обычно 0). Отрицательные значения ещё чуть ПРИЖИМАЮТ дугу. */
-const LIFT_TWEAK_PX_BY_STEP = [0, 0, 0, 0, 0, 0];
+/* ===================== ПАРАМЕТРЫ ПАРАБОЛЫ ===================== */
+/* Желаемая доля времени до апекса (чтобы спуск не был «свечкой вниз»): */
+const APEX_F_UP   = 0.56;  // если y1 >= y0 (апекс немного ПОЗЖЕ середины)
+const APEX_F_DOWN = 0.44;  // если y1 <  y0 (апекс немного РАНЬШЕ середины)
+const APEX_F_MIN  = 0.42;
+const APEX_F_MAX  = 0.58;
+/* Ограничения по «гравитации» (px/s^2), чтобы не было сумасшедших ускорений: */
+const G_MIN = 700;
+const G_MAX = 3200;
 
 /* ===================== STATE ===================== */
 let step   = 0;
@@ -527,34 +529,59 @@ function laneCenterLeftOnScreen(laneEl){
   return xScreen - CHICKEN_HALF_W + CHICKEN_X_OFFSET;
 }
 
-/* ===================== РЕАЛИСТИЧНЫЙ ПРЫЖОК (парабола) ===================== */
-function jumpBezier({ // имя/сигнатура оставлены теми же
+/* ===================== ПАРАБОЛИЧЕСКИЙ ПРЫЖОК ===================== */
+/**
+ * Чистая баллистика: y(t) = y0 + vy*t - 0.5*g*t^2, x(t) = x0 + vx*t
+ * За фиксированное duration попадаем ровно в (x1,y1).
+ * Дополнительно — задаём момент апекса tA = α*T, чтобы спуск не был «обрывом».
+ */
+function jumpBezier({
   x0, y0, x1, y1,
-  duration = 520,  // мс
-  extraLift = 0,   // апекс-твик (px), можно оставить 0
+  duration = 520,
+  extraLift = 1,    // можно слегка поднять дугу, влияет на α (см. ниже)
   biasOverride = null // не используется
 }){
   const T = Math.max(0.001, duration / 1000); // секунды
   const dx = x1 - x0;
   const dy = y1 - y0;
 
-  // База под платформу
-  let gBase = isMobile ? G_MOBILE : G_DESKTOP;
+  // Базовая α по направлению прыжка
+  let alpha = (dy >= 0) ? APEX_F_UP : APEX_F_DOWN;
 
-  // Перевод «пикселей апекса» в прибавку к g под текущий T:
-  // L ≈ g*T^2/8  =>  dg_per_px = 8/T^2
-  const dgPerPx = 8 / (T*T);
+  // Если высотная разница мала — подтягиваем α ближе к 0.5 (но не даём стать «ровно 0.5»)
+  const absDy = Math.abs(dy);
+  if (absDy < 10){
+    const blend = 1 - Math.min(absDy/10, 1); // 10px -> 0
+    alpha = 0.5 + (alpha - 0.5) * (1 - 0.6*blend);
+  }
+  // Лёгкая поправка от extraLift: положит. lift делает апекс немного позже, отриц. — раньше
+  alpha = Math.max(APEX_F_MIN, Math.min(APEX_F_MAX, alpha + (extraLift||0)*0.0006));
 
-  // Небольшой пер-степовый твик (чаще 0) + extraLift (если задан)
-  const stepLift = Array.isArray(LIFT_TWEAK_PX_BY_STEP)
-    ? (LIFT_TWEAK_PX_BY_STEP[Math.min(step, LIFT_TWEAK_PX_BY_STEP.length-1)] || 0)
-    : 0;
+  // Считаем g из условия апекса tA = αT и конечной точки за T:
+  // y1 - y0 = g*T*(αT - 0.5T)  =>  g = (dy) / (T^2 * (α - 0.5))
+  let denom = (alpha - 0.5);
+  // страховка от нуля
+  if (Math.abs(denom) < 0.04) denom = (denom >= 0 ? 0.04 : -0.04);
 
-  const g = gBase + ( (extraLift || 0) + stepLift ) * dgPerPx;
+  let g = dy / (T*T*denom);
 
-  // Подбираем скорости, чтобы точно попасть в (x1,y1) за T
+  // Ограничиваем g и при необходимости корректируем α, чтобы вернуться в допустимый диапазон
+  if (!(g > 0)) {
+    // обеспечим «гравитацию вниз»
+    alpha = (dy >= 0) ? Math.max(alpha, 0.52) : Math.min(alpha, 0.48);
+    g = Math.abs(dy) / (T*T*Math.max(0.04, Math.abs(alpha-0.5)));
+  }
+  if (g < G_MIN || g > G_MAX){
+    // подберём α так, чтобы g попал в [G_MIN..G_MAX]
+    const targetG = Math.max(G_MIN, Math.min(G_MAX, g));
+    // α = 0.5 + dy/(g*T^2)
+    alpha = 0.5 + dy/(targetG*T*T);
+    alpha = Math.max(APEX_F_MIN, Math.min(APEX_F_MAX, alpha));
+    g = Math.max(G_MIN, Math.min(G_MAX, dy/(T*T*(alpha-0.5))));
+  }
+
   const vx = dx / T;
-  const vy = (dy + 0.5 * g * T * T) / T;
+  const vy = g * alpha * T;
 
   // rAF-анимация
   const t0 = performance.now();
@@ -568,10 +595,10 @@ function jumpBezier({ // имя/сигнатура оставлены теми �
       let t = (now - t0) / duration; if (t > 1) t = 1;
       const tt = t * T;
 
-      // Параболическая траектория
       const x = x0 + vx * tt;
-      const y = y0 + (vy * tt) - (0.5 * g * tt * tt);
+      const y = y0 + vy * tt - 0.5 * g * tt * tt;
 
+      // лёгкая квантизация против дрожи
       chicken.style.left   = (Math.round(x * 2) / 2) + 'px';
       chicken.style.bottom = (Math.round(y * 2) / 2) + 'px';
 
@@ -637,7 +664,7 @@ function openPopup(){
   if (!popup || popupShown) return;
   popupShown = true;
   popup.style.display='block'; popup.style.visibility='visible';
-  popup.style.opacity='1'; popup.style.pointerEvents='auto';
+  popup.style.opacity='1'; popup.style.pointerEvents='auto'; 
   popup.removeAttribute('aria-hidden');
   if (popupWin){
     popupWin.style.display='block'; popupWin.style.transform='scale(0.92)';
@@ -719,7 +746,7 @@ goBtn.addEventListener('click', async () => {
   trackX = nextTrackX; trackY = nextTrackY;
   track.style.transform = `translate3d(${trackX}px, ${trackY}px, 0)`;
 
-  // 2) Цели
+  // 2) Цели — по X строго центр лейна, по Y — база + поднятая посадка
   const x1 = laneCenterLeftOnScreen(targetLane);
   const baseY = (CHICKEN_BOTTOM_PX[Math.min(step, CHICKEN_BOTTOM_PX.length-1)] ?? BASE_BOTTOM);
   const y1 = baseY + landingRaiseFor(step);
@@ -730,18 +757,13 @@ goBtn.addEventListener('click', async () => {
   const x0 = hasX ? parseFloat(chicken.style.left)   : (START_POS.mode==='absolute' ? START_POS.left   : 0);
   const y0 = hasY ? parseFloat(chicken.style.bottom) : (START_POS.bottom ?? BASE_BOTTOM);
 
-  // 4) Доп. лифт (если хочешь чуть подправить отдельные дорожки, можно через data-arc-lift)
-  const laneLiftAttr = parseInt(targetLane.dataset.arcLift || '0', 10) || 0;
-  const extraLiftGlobal = 0;
-  const extraLift = extraLiftGlobal + laneLiftAttr;
+  // 4) Полёт — чистая ПАРАБОЛА с апексом в доле времени α
+  await jumpBezier({ x0, y0, x1, y1, duration: 520 });
 
-  // 5) Полёт — реалистичная парабола (апекс ниже из-за пониженного G_* выше)
-  await jumpBezier({ x0, y0, x1, y1, duration: 520, extraLift });
-
-  // 6) Флип
+  // 5) Флип
   flipToCoin(targetLane);
 
-  // 7) Баланс
+  // 6) Баланс
   const mult = MULTS[step] || 1;
   const from = balanceValue;
   let next   = preciseMul(balanceValue, mult);
@@ -749,7 +771,7 @@ goBtn.addEventListener('click', async () => {
   balanceValue = next;
   animateBalance(from, next, 450);
 
-  // 8) Финал
+  // 7) Финал
   if (step === lanes.length - 1 || targetLane.classList.contains('gold-egg')){
     chicken.classList.remove('celebrate'); void chicken.offsetWidth;
     chicken.classList.add('celebrate');
@@ -784,6 +806,7 @@ window.GameSpawn = {
   respawnChicken
 };
 </script>
+
 
 
 
