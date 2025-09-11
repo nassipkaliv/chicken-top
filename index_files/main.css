@@ -397,7 +397,7 @@ html .ro {
 	-ms-transform: translateX(-50%);
 	transform: translateX(-50%);
 	height: 90px;
-  width: 120px;
+  width: 60px;
 	z-index: 22;
 	cursor: pointer;
 	color: #ee9800;
@@ -415,7 +415,7 @@ html .ro {
   overflow-y: auto;
   overflow-x: hidden; 
   flex-wrap: nowrap;
-  width: 112px;
+	border-radius: 1em;
 }
 
 .lang_switcher_outer.act .lang_switcher {
@@ -424,24 +424,25 @@ html .ro {
 }
 
 .lang_switcher_outer .lang_switcher {
-	display: -webkit-box;
-	display: -ms-flexbox;
-	display: flex;
-	-webkit-box-align: center;
-	-ms-flex-align: center;
-	align-items: center;
-	padding: 0 .7rem;
-	user-select: none;
-	-moz-user-select: none;
-	-webkit-user-select: none;
-	-ms-user-select: none;
-	cursor: pointer;
-	position: relative;
-	z-index: 3;
-	border-radius: 1rem;
-	color: #fff
+    display: -webkit-box;
+    display: -ms-flexbox;
+    display: flex;
+    -webkit-box-align: center;
+    -ms-flex-align: center;
+    align-items: center;
+    padding: 0 .7rem;
+    user-select: none;
+    -moz-user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+    cursor: pointer;
+    position: relative;
+    z-index: 3;
+    background: #000;
+    border-radius: 1rem;
+    height: 4em;
+    color: #fff;
 }
-
 .lang_switcher_outer .lang_switcher .curr_lang {
 	position: relative;
 	display: inline-block;
@@ -456,8 +457,7 @@ html .ro {
 }
 
 .lang_switcher_outer .lang_switcher .curr_lang span {
-	font-size: 1.5em;
-	display: none;
+	font-size: 16px;
 	font-weight: 600
 }
 
@@ -555,7 +555,7 @@ html .ro {
 .lang_list {
 	position: absolute;
 	list-style-type: none;
-	top: 9em;
+	top: 5em;
 	display: none;
 	-ms-flex-wrap: wrap;
 	flex-wrap: wrap;
@@ -601,7 +601,6 @@ html .ro {
   line-height: 150%;
   letter-spacing: 0.03em;
   color: #1d1b20;
-  padding-left: 12px;
 }
 
 .lang_list li.curr {
@@ -2220,8 +2219,8 @@ html.vn .button span {
 
   .lang_list {
     width: 100%;
-    left: -8rem;
-    top: 6rem;
+    left: 0rem;
+    top: 5rem;
   }
 
 	.lang_list li {
