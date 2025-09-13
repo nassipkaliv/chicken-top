@@ -2158,7 +2158,7 @@ html.vn .button span {
   }
 
   .balance-count {
-    padding: 2px 52px;
+    padding: 2px 35px;
     margin-top: -10px;
     border: 2.5px solid #a7622e;
     border-radius: 8px;
@@ -2262,8 +2262,8 @@ html.vn .button span {
 			}
 
 		.lang_switcher_outer {
-        width: 9rem;
-				right: -4rem;
+        width: 6rem;
+				right: -1.8rem;
 			}
 
 			#animation_container {
@@ -2294,7 +2294,7 @@ html.vn .button span {
 
 @media (max-width: 400px) {
 	    .lang_switcher_outer {
-        width: 9rem;
+        width: 6rem;
     }
 
 		.lane {
