@@ -444,6 +444,7 @@ html .ro {
     height: 4em;
     color: #fff;
 }
+
 .lang_switcher_outer .lang_switcher .curr_lang {
 	position: relative;
 	display: inline-block;
