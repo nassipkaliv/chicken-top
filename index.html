@@ -484,13 +484,12 @@ function landingRaiseFor(step){
 }
 
 /* ===================== REALISTIC ARC (БАЛЛИСТИКА) ===================== */
-/* Единая гравитация и целевая высота апекса (px) для стабильной дуги */
-const G_UNIFIED = 1850;                // px/s^2 — одинаково на десктопе и мобилке
-const ARC_HEIGHT_DESKTOP = 60;         // целевая высота вершины дуги
-const ARC_HEIGHT_MOBILE  = 54;         // немного ниже на мобилке (меньше экран)
+const G_UNIFIED = 1850;
+const ARC_HEIGHT_DESKTOP = 60;
+const ARC_HEIGHT_MOBILE  = 54;
 
-const T_MIN = 0.48;                    // сек — чтобы не было «рывка»
-const T_MAX = 0.62;                    // сек — чтобы не было «зависания»
+const T_MIN = 0.48;
+const T_MAX = 0.62;
 
 /* Точечный твик высоты по шагам (обычно 0) */
 const LIFT_TWEAK_PX_BY_STEP = [0, 0, 0, 0, 0, 0];
@@ -499,6 +498,7 @@ const LIFT_TWEAK_PX_BY_STEP = [0, 0, 0, 0, 0, 0];
 let step   = 0;
 let trackX = 0, trackY = 0;
 let sparklesPlayed = false, popupShown = false;
+let isAnimating = false;              /* <<< защита от многократных кликов */
 
 let balanceValue = (() => {
   const txt = (balanceEl?.textContent || '20').replace(/[^\d.,]/g,'').replace(',','.');
@@ -540,22 +540,13 @@ function screenXFromCssLeft(cssLeft){
 }
 function lerp(a,b,t){ return a + (b-a)*t; }
 
-
-
 async function jumpWithPanSync({
   x0World, y0, x1World, y1,
   panX0, panX1, panY0, panY1,
   extraLift = 0
 }){
-  // --- физика дуги (унифицированная) ---
-  const g = (typeof G_UNIFIED !== 'undefined')
-    ? G_UNIFIED
-    : (isMobile ? (typeof G_MOBILE!=='undefined'?G_MOBILE:1800)
-                : (typeof G_DESKTOP!=='undefined'?G_DESKTOP:1850));
-
-  const arcBase = (typeof ARC_HEIGHT_DESKTOP !== 'undefined')
-    ? (isMobile ? ARC_HEIGHT_MOBILE : ARC_HEIGHT_DESKTOP)
-    : (isMobile ? 82 : 86);
+  const g = G_UNIFIED;
+  const arcBase = isMobile ? ARC_HEIGHT_MOBILE : ARC_HEIGHT_DESKTOP;
 
   const stepLift = Array.isArray(LIFT_TWEAK_PX_BY_STEP)
     ? (LIFT_TWEAK_PX_BY_STEP[Math.min(step, LIFT_TWEAK_PX_BY_STEP.length-1)] || 0)
@@ -563,16 +554,13 @@ async function jumpWithPanSync({
 
   const L = Math.max(0, arcBase + stepLift + (extraLift || 0));
   let T   = Math.sqrt((8 * L) / g);
-  const T_MIN_LOCAL = (typeof T_MIN !== 'undefined') ? T_MIN : 0.48;
-  const T_MAX_LOCAL = (typeof T_MAX !== 'undefined') ? T_MAX : 0.62;
-  T = Math.max(T_MIN_LOCAL, Math.min(T_MAX_LOCAL, T));
+  T = Math.max(T_MIN, Math.min(T_MAX, T));
 
   const dx = x1World - x0World;
   const dy = y1 - y0;
   const vx = dx / T;
   const vy = (dy + 0.5 * g * T * T) / T;
 
-  // --- анимация в одном rAF-цикле: и прыжок, и панорама ---
   const ms = T * 1000;
   const t0 = performance.now();
 
@@ -591,12 +579,10 @@ async function jumpWithPanSync({
       let k = (now - t0) / ms; if (k > 1) k = 1;
       const tt = k * T;
 
-      // Панорама (камера) синхронно с прыжком
       const curTrackX = lerp(panX0, panX1, k);
       const curTrackY = lerp(panY0, panY1, k);
       track.style.transform = `translate3d(${curTrackX}px, ${curTrackY}px, 0)`;
 
-      // Мировая позиция курицы -> экран -> CSS
       const xWorld = x0World + vx * tt;
       const y      = y0 + vy * tt - 0.5 * g * tt * tt;
 
@@ -609,7 +595,6 @@ async function jumpWithPanSync({
       if (k < 1){
         requestAnimationFrame(frame);
       } else {
-        // Финализируем положения
         trackX = panX1; trackY = panY1;
         track.style.transform = `translate3d(${trackX}px, ${trackY}px, 0)`;
         chicken.style.left   = cssLeftFromScreenX(x1World + trackX) + 'px';
@@ -628,34 +613,21 @@ async function jumpWithPanSync({
   });
 }
 
-
-
-
 /* ===================== РЕАЛИСТИЧНЫЙ ПРЫЖОК (парабола) ===================== */
-function jumpBezier({
-  x0, y0, x1, y1,
-  duration = null,   // больше не используется; оставлен для совместимости
-  extraLift = 0,     // доп. поднятие апекса (px), в т.ч. через data-arc-lift
-  biasOverride = null
-}){
+function jumpBezier({ x0, y0, x1, y1, duration = null, extraLift = 0, biasOverride = null }){
   const dx = x1 - x0;
   const dy = y1 - y0;
 
-  // База для апекса
-  const arcBase   = isMobile ? ARC_HEIGHT_MOBILE : ARC_HEIGHT_DESKTOP;
-  const stepLift  = Array.isArray(LIFT_TWEAK_PX_BY_STEP)
+  const arcBase  = isMobile ? ARC_HEIGHT_MOBILE : ARC_HEIGHT_DESKTOP;
+  const stepLift = Array.isArray(LIFT_TWEAK_PX_BY_STEP)
     ? (LIFT_TWEAK_PX_BY_STEP[Math.min(step, LIFT_TWEAK_PX_BY_STEP.length-1)] || 0)
     : 0;
 
-  // Итоговая желаемая высота вершины дуги (px)
   const L = Math.max(0, arcBase + stepLift + (extraLift || 0));
-
-  // Время полёта из желаемой высоты апекса: L = g*T^2/8  =>  T = sqrt(8L/g)
   const g = G_UNIFIED;
   let T = Math.sqrt((8 * L) / g);
-  T = Math.max(T_MIN, Math.min(T_MAX, T)); // ограничим, чтобы ощущалось одинаково
+  T = Math.max(T_MIN, Math.min(T_MAX, T));
 
-  // Скорости, чтобы точно попасть в (x1,y1) за время T при данной «гравитации»
   const vx = dx / T;
   const vy = (dy + 0.5 * g * T * T) / T;
 
@@ -672,7 +644,6 @@ function jumpBezier({
       let k = (now - t0) / ms; if (k > 1) k = 1;
       const tt = k * T;
 
-      // Параболическая траектория
       const x = x0 + vx * tt;
       const y = y0 + (vy * tt) - (0.5 * g * tt * tt);
 
@@ -694,7 +665,6 @@ function jumpBezier({
     requestAnimationFrame(frame);
   });
 }
-
 
 /* ===================== АНИМАЦИИ / ЭКОНОМИКА ===================== */
 function flipToCoin(laneEl){
@@ -808,8 +778,11 @@ addEventListener('resize', () => {
 goBtn.addEventListener('click', async () => {
   if (step >= lanes.length) return;
 
-  goBtn.classList.add('disabled');
-  setTimeout(()=> goBtn.classList.remove('disabled'), 400);
+  /* ==== ЗАЩИТА ОТ МНОГОКРАТНЫХ НАЖАТИЙ ==== */
+  if (isAnimating || popupShown || goBtn.disabled) return; // игнор повторов
+  isAnimating   = true;
+  goBtn.disabled = true;             // визуально: opacity: 0.5 (доб. в CSS: #go-btn:disabled{opacity:.5})
+
   if (step === 0 && cashBtn) cashBtn.classList.remove('disabled');
 
   const targetLane = lanes[step];
@@ -824,11 +797,11 @@ goBtn.addEventListener('click', async () => {
   const panX0 = trackX;
   const panY0 = trackY;
 
-  // Цели по Y (как раньше)
+  // Цели по Y
   const baseY = (CHICKEN_BOTTOM_PX[Math.min(step, CHICKEN_BOTTOM_PX.length-1)] ?? BASE_BOTTOM);
   const y1 = baseY + landingRaiseFor(step);
 
-  // Текущая позиция курицы в МИРОВЫХ координатах
+  // Текущая позиция курицы в мировых координатах
   const hasX = chicken.style.left && chicken.style.left.endsWith('px');
   const hasY = chicken.style.bottom && chicken.style.bottom.endsWith('px');
   const cssLeft0 = hasX ? parseFloat(chicken.style.left)
@@ -839,7 +812,7 @@ goBtn.addEventListener('click', async () => {
   const y0 = hasY ? parseFloat(chicken.style.bottom)
                   : (START_POS.bottom ?? BASE_BOTTOM);
 
-  // Целевой x в МИРОВЫХ координатах (центр дорожки на треке)
+  // Целевой x (центр lane) в мировых координатах
   const x1World = laneCenterTrack;
 
   // Доп. лифт
@@ -864,16 +837,21 @@ goBtn.addEventListener('click', async () => {
   balanceValue = next;
   animateBalance(from, next, 450);
 
+  // Финал
   if (step === lanes.length - 1 || targetLane.classList.contains('gold-egg')){
     chicken.classList.remove('celebrate'); void chicken.offsetWidth;
     chicken.classList.add('celebrate');
     playSparklesOnce();
     setTimeout(openPopup, SPARKLES_TO_POPUP_DELAY);
+    // На финале кнопку не разблокируем
+  } else {
+    // Разблокировка кнопки для следующего шага
+    isAnimating = false;
+    goBtn.disabled = false;
   }
 
   step++;
 });
-
 
 /* ===================== API ===================== */
 function setSpawnChickenLeft(px){
@@ -899,6 +877,7 @@ window.GameSpawn = {
   respawnChicken
 };
 </script>
+
 
 
 

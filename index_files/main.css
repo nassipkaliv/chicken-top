@@ -567,7 +567,7 @@ html .ro {
 	cursor: auto;
 	border-top: none;
   box-shadow: 0 2px 6px 2px rgba(0, 0, 0, 0.15), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
-  background: #f3edf7;
+	background: linear-gradient(180deg, #bc783a 0%, #dd8c35 49.52%, #974f1e 100%);
 }
 
 .lang_list li img {
@@ -591,7 +591,7 @@ html .ro {
 }
 
 .lang_list li:hover {
-	background: #cdcff3;
+    background: initial;
 }
 
 .lang_list li span {
@@ -602,7 +602,7 @@ html .ro {
   font-size: 16px;
   line-height: 150%;
   letter-spacing: 0.03em;
-  color: #1d1b20;
+  color: #fff;
 }
 
 .lang_list li.curr {
@@ -1461,6 +1461,9 @@ html.is-loading body {
 .button.disabled::after {
 	display: none
 }
+
+#go-btn:disabled { opacity: .5; pointer-events: none; }
+
 
 .button span {
 	font-family: "Druk Medium";
